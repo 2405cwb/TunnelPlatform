@@ -30,7 +30,7 @@ Host=localhost
 Port=5432
 Database=tunnel_platform
 Username=postgres
-Password=2405
+Password=****
 ```
 
 默认地址：
