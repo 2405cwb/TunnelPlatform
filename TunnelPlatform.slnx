@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="TunnelPlatform.Api/TunnelPlatform.Api.csproj" />
+  <Project Path="TunnelPlatform.Shared/TunnelPlatform.Shared.csproj" />
+  <Project Path="TunnelPlatform.WinForms/TunnelPlatform.WinForms.csproj" />
+</Solution>
