@@ -167,6 +167,8 @@ public partial class Form1 : Form
                         DisplayName = entity.DisplayName,
                         BeginStation = entity.BeginStation,
                         EndStation = entity.EndStation,
+                        BeginGps = entity.BeginGps,
+                        EndGps = entity.EndGps,
                         BeginMileage = entity.BeginMileage,
                         EndMileage = entity.EndMileage,
                         StationType = entity.StationType,
@@ -524,6 +526,8 @@ public partial class Form1 : Form
                 ProjectNumber = project.ProjectNumber,
                 BeginStation = beginStation,
                 EndStation = endStation,
+                BeginGps = GetCell(row, entityHeaderMap, "起点gps", 11).Trim(),
+                EndGps = GetCell(row, entityHeaderMap, "终点gps", 12).Trim(),
                 BeginMileage = GetDoubleCell(row, entityHeaderMap, "起始里程", 4),
                 EndMileage = GetDoubleCell(row, entityHeaderMap, "终止里程", 5),
                 ProjectName = project.ProjectName,
@@ -540,7 +544,7 @@ public partial class Form1 : Form
                 StationNumber = (int)GetDoubleCell(row, entityHeaderMap, "区间序号", 8),
                 TunnelWidth = GetOptionalDoubleCell(row, entityHeaderMap, "隧道宽度", 9),
                 TunnelHeight = GetOptionalDoubleCell(row, entityHeaderMap, "隧道高度", 10),
-                EntityRemark = GetCell(row, entityHeaderMap, "备注", 11).Trim(),
+                EntityRemark = GetCell(row, entityHeaderMap, "备注", 13).Trim(),
                 CollectionDate = project.CollectionDate,
             });
         }

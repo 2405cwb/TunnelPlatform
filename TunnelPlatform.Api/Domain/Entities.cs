@@ -39,6 +39,100 @@ public sealed class Project
     public ICollection<CollectionBatch> Batches { get; set; } = new List<CollectionBatch>();
 }
 
+public sealed class AppUser
+{
+    public Guid Id { get; set; }
+
+    public string UserName { get; set; } = string.Empty;
+
+    public string DisplayName { get; set; } = string.Empty;
+
+    public string PasswordHash { get; set; } = string.Empty;
+
+    public string PasswordSalt { get; set; } = string.Empty;
+
+    public bool IsActive { get; set; } = true;
+
+    public DateTimeOffset CreatedAt { get; set; }
+
+    public DateTimeOffset? LastLoginAt { get; set; }
+
+    public ICollection<AppUserRole> UserRoles { get; set; } = new List<AppUserRole>();
+
+    public ICollection<AppUserSession> Sessions { get; set; } = new List<AppUserSession>();
+}
+
+public sealed class AppRole
+{
+    public Guid Id { get; set; }
+
+    public string RoleCode { get; set; } = string.Empty;
+
+    public string RoleName { get; set; } = string.Empty;
+
+    public string Description { get; set; } = string.Empty;
+
+    public DateTimeOffset CreatedAt { get; set; }
+
+    public ICollection<AppUserRole> UserRoles { get; set; } = new List<AppUserRole>();
+
+    public ICollection<AppRolePermission> RolePermissions { get; set; } = new List<AppRolePermission>();
+}
+
+public sealed class AppPermission
+{
+    public Guid Id { get; set; }
+
+    public string PermissionCode { get; set; } = string.Empty;
+
+    public string PermissionName { get; set; } = string.Empty;
+
+    public string Description { get; set; } = string.Empty;
+
+    public DateTimeOffset CreatedAt { get; set; }
+
+    public ICollection<AppRolePermission> RolePermissions { get; set; } = new List<AppRolePermission>();
+}
+
+public sealed class AppUserRole
+{
+    public Guid UserId { get; set; }
+
+    public AppUser User { get; set; } = null!;
+
+    public Guid RoleId { get; set; }
+
+    public AppRole Role { get; set; } = null!;
+}
+
+public sealed class AppRolePermission
+{
+    public Guid RoleId { get; set; }
+
+    public AppRole Role { get; set; } = null!;
+
+    public Guid PermissionId { get; set; }
+
+    public AppPermission Permission { get; set; } = null!;
+}
+
+public sealed class AppUserSession
+{
+    public Guid Id { get; set; }
+
+    public Guid UserId { get; set; }
+
+    public AppUser User { get; set; } = null!;
+
+    public string TokenHash { get; set; } = string.Empty;
+
+    public DateTimeOffset CreatedAt { get; set; }
+
+    public DateTimeOffset ExpiresAt { get; set; }
+
+    public DateTimeOffset? RevokedAt { get; set; }
+}
+
 /// <summary>
 /// 工程实例：线路 + 上下行 + 采集日期。
 /// </summary>
@@ -95,6 +189,10 @@ public sealed class Station
     public string BegStation { get; set; } = string.Empty;
 
     public string EndStation { get; set; } = string.Empty;
+
+    public string BeginGps { get; set; } = string.Empty;
+
+    public string EndGps { get; set; } = string.Empty;
 
     public double BegMileage { get; set; }
 

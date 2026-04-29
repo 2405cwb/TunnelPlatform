@@ -4,9 +4,77 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>地铁隧道展示平台</title>
+    <link rel="icon" href="data:,">
     <link rel="stylesheet" href="/styles.css">
+    <script src="http://api.tianditu.gov.cn/api?v=4.0&tk=3df7fd01e079c27ce331959db0ea4492"></script>
 </head>
 <body>
+    <section id="authScreen" class="auth-screen">
+        <div class="auth-backdrop">
+            <div class="auth-card">
+                <p class="eyebrow">Secure Tunnel Console</p>
+                <h1>地铁隧道展示平台</h1>
+                <p class="auth-subtitle">工程线路、采集期次、病害图像与点云数据统一入口</p>
+                <div class="auth-tabs">
+                    <button id="loginModeButton" type="button" class="active">登录</button>
+                    <button id="registerModeButton" type="button">注册</button>
+                </div>
+                <form id="authForm" class="auth-form">
+                    <input id="authUserName" autocomplete="username" placeholder="用户名" required>
+                    <input id="authPassword" type="password" autocomplete="current-password" placeholder="密码" required>
+                    <div class="captcha-row">
+                        <input id="captchaCode" inputmode="numeric" placeholder="验证码" required>
+                        <button id="captchaButton" type="button" class="captcha-button" title="刷新验证码">
+                            <img id="captchaImage" alt="验证码">
+                        </button>
+                    </div>
+                    <button id="authSubmitButton" type="submit">登录平台</button>
+                </form>
+            </div>
+        </div>
+    </section>
+
+    <section id="launchScreen" class="launch-screen hidden">
+        <header class="launch-topbar">
+            <div class="brand">
+                <p class="eyebrow">Tunnel Digital Twin</p>
+                <h1>工程线路三维态势图</h1>
+            </div>
+            <div class="top-actions">
+                <select id="lineSelect" aria-label="选择工程线路"></select>
+                <select id="dateSelect" aria-label="选择采集日期"></select>
+                <button id="enterProjectButton" type="button" title="进入项目">进入项目</button>
+                <button id="logoutButton" type="button" title="退出登录">退出</button>
+            </div>
+        </header>
+        <main class="launch-grid">
+            <section class="launch-map-shell">
+                <div id="projectMap" class="project-map hero-map"></div>
+                <div class="map-hud">
+                    <strong id="launchMapTitle">工程线路</strong>
+                    <span id="mapMeta">选择工程后展示站点与区间</span>
+                </div>
+                <div id="mapLegend" class="map-legend launch-legend"></div>
+            </section>
+            <aside class="launch-side">
+                <section class="panel">
+                    <div class="panel-heading">
+                        <h2>工程期次</h2>
+                        <span id="projectCount">0</span>
+                    </div>
+                    <div id="projectCards" class="project-cards"></div>
+                </section>
+                <section class="panel">
+                    <div class="panel-heading">
+                        <h2>当前线路</h2>
+                        <span id="entityCountLaunch">0</span>
+                    </div>
+                    <div id="launchSummary" class="launch-summary"></div>
+                </section>
+            </aside>
+        </main>
+    </section>
+
     <div class="shell">
         <header class="topbar">
             <div class="brand">
@@ -19,6 +87,7 @@
                     <option value="dark">深色主题</option>
                     <option value="light">白色主题</option>
                 </select>
+                <button id="backToMapButton" type="button" title="返回地图">返回地图</button>
                 <button id="refreshButton" type="button" title="刷新数据">刷新</button>
                 <a class="ghost-link" href="/swagger" target="_blank">Swagger</a>
             </div>
@@ -67,7 +136,7 @@
                     <div class="viewer-toolbar">
                         <div>
                             <h2 id="viewerTitle">二维连续浏览</h2>
-                            <p id="viewerMeta">鼠标滚轮可切换图片</p>
+                            <p id="viewerMeta">鼠标滚轮连续浏览，底部进度条可快速定位</p>
                         </div>
                         <div class="view-tabs" role="tablist" aria-label="浏览模式">
                             <button id="imageViewTab" type="button" class="active" title="二维图像">二维图像</button>
@@ -84,7 +153,7 @@
                     </div>
                     <div class="stage-stack">
                         <div id="imageStage" class="image-stage stage-view active">
-                            <img id="grayImage" alt="灰度图">
+                            <div id="imageStrip" class="image-strip"></div>
                             <div id="ringOverlay" class="ring-overlay"></div>
                             <div id="diseaseOverlay" class="disease-overlay"></div>
                             <div id="imageEmpty" class="empty-state">暂无灰度图</div>
@@ -108,7 +177,16 @@
                             </div>
                         </div>
                     </div>
-                    <div id="imageTimeline" class="timeline"></div>
+                    <div id="imageTimeline" class="timeline thumbnail-timeline">
+                        <div id="thumbnailProgress" class="thumbnail-progress">
+                            <div id="thumbnailStrip" class="thumbnail-strip"></div>
+                            <div id="thumbnailActiveFrame" class="thumbnail-active-frame"></div>
+                            <div id="imageProgressPreview" class="image-progress-preview">
+                                <img id="imageProgressPreviewImg" alt="">
+                                <span id="imageProgressPreviewText"></span>
+                            </div>
+                        </div>
+                    </div>
                 </section>
             </section>
 
@@ -116,7 +194,7 @@
                 <section class="panel info-panel">
                     <div class="panel-heading">
                         <h2>工程信息</h2>
-                        <span id="projectCount">0</span>
+                        <span id="projectInstanceCount">0</span>
                     </div>
                     <div id="projectInfo" class="project-info"></div>
                     <div class="summary-strip" id="summaryStrip"></div>
@@ -164,6 +242,6 @@
     </dialog>
 
     <div id="toast" role="status"></div>
-    <script src="/app.js?v=2026042703" defer></script>
+    <script src="/app.js?v=2026042904" defer></script>
 </body>
 </html>

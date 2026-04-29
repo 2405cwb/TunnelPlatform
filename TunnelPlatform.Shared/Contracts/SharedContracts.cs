@@ -2,6 +2,57 @@ using System.Globalization;
 
 namespace TunnelPlatform.Shared.Contracts;
 
+public sealed record CaptchaDto
+{
+    public string CaptchaId { get; init; } = string.Empty;
+
+    public string ImageDataUrl { get; init; } = string.Empty;
+}
+
+public sealed record RegisterRequestDto
+{
+    public string UserName { get; init; } = string.Empty;
+
+    public string Password { get; init; } = string.Empty;
+
+    public string CaptchaId { get; init; } = string.Empty;
+
+    public string CaptchaCode { get; init; } = string.Empty;
+}
+
+public sealed record LoginRequestDto
+{
+    public string UserName { get; init; } = string.Empty;
+
+    public string Password { get; init; } = string.Empty;
+
+    public string CaptchaId { get; init; } = string.Empty;
+
+    public string CaptchaCode { get; init; } = string.Empty;
+}
+
+public sealed record AuthUserDto
+{
+    public Guid UserId { get; init; }
+
+    public string UserName { get; init; } = string.Empty;
+
+    public string DisplayName { get; init; } = string.Empty;
+
+    public List<string> Roles { get; init; } = [];
+
+    public List<string> Permissions { get; init; } = [];
+}
+
+public sealed record AuthResponseDto
+{
+    public string Token { get; init; } = string.Empty;
+
+    public DateTimeOffset ExpiresAt { get; init; }
+
+    public AuthUserDto User { get; init; } = new();
+}
+
 /// <summary>
 /// 台账中的一行站点或区间记录。
 /// </summary>
@@ -14,6 +65,10 @@ public sealed record LedgerEntryDto
 
     /// <summary>终止站点名称。</summary>
     public string EndStation { get; init; } = string.Empty;
+
+    public string BeginGps { get; init; } = string.Empty;
+
+    public string EndGps { get; init; } = string.Empty;
 
     /// <summary>起始里程。</summary>
     public double BeginMileage { get; init; }
@@ -140,6 +195,10 @@ public sealed record ProjectEntitySummaryDto
 
     /// <summary>终止站点。</summary>
     public string EndStation { get; init; } = string.Empty;
+
+    public string BeginGps { get; init; } = string.Empty;
+
+    public string EndGps { get; init; } = string.Empty;
 
     /// <summary>起始里程。</summary>
     public double BeginMileage { get; init; }

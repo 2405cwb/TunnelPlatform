@@ -80,6 +80,92 @@ internal static class DatabaseSchemaInitializer
             CREATE UNIQUE INDEX IF NOT EXISTS "UX_projects_Name" ON projects ("Name");
             """,
             """
+            CREATE TABLE IF NOT EXISTS app_users (
+                "Id" uuid NOT NULL PRIMARY KEY,
+                "UserName" varchar(64) NOT NULL,
+                "DisplayName" varchar(128) NOT NULL DEFAULT '',
+                "PasswordHash" varchar(256) NOT NULL,
+                "PasswordSalt" varchar(128) NOT NULL,
+                "IsActive" boolean NOT NULL DEFAULT TRUE,
+                "CreatedAt" timestamp with time zone NOT NULL,
+                "LastLoginAt" timestamp with time zone
+            );
+
+            CREATE UNIQUE INDEX IF NOT EXISTS "UX_app_users_UserName" ON app_users ("UserName");
+
+            CREATE TABLE IF NOT EXISTS app_roles (
+                "Id" uuid NOT NULL PRIMARY KEY,
+                "RoleCode" varchar(64) NOT NULL,
+                "RoleName" varchar(128) NOT NULL,
+                "Description" varchar(512) NOT NULL DEFAULT '',
+                "CreatedAt" timestamp with time zone NOT NULL
+            );
+
+            CREATE UNIQUE INDEX IF NOT EXISTS "UX_app_roles_RoleCode" ON app_roles ("RoleCode");
+
+            CREATE TABLE IF NOT EXISTS app_permissions (
+                "Id" uuid NOT NULL PRIMARY KEY,
+                "PermissionCode" varchar(128) NOT NULL,
+                "PermissionName" varchar(128) NOT NULL,
+                "Description" varchar(512) NOT NULL DEFAULT '',
+                "CreatedAt" timestamp with time zone NOT NULL
+            );
+
+            CREATE UNIQUE INDEX IF NOT EXISTS "UX_app_permissions_PermissionCode" ON app_permissions ("PermissionCode");
+
+            CREATE TABLE IF NOT EXISTS app_user_roles (
+                "UserId" uuid NOT NULL REFERENCES app_users ("Id") ON DELETE CASCADE,
+                "RoleId" uuid NOT NULL REFERENCES app_roles ("Id") ON DELETE CASCADE,
+                PRIMARY KEY ("UserId", "RoleId")
+            );
+
+            CREATE TABLE IF NOT EXISTS app_role_permissions (
+                "RoleId" uuid NOT NULL REFERENCES app_roles ("Id") ON DELETE CASCADE,
+                "PermissionId" uuid NOT NULL REFERENCES app_permissions ("Id") ON DELETE CASCADE,
+                PRIMARY KEY ("RoleId", "PermissionId")
+            );
+
+            CREATE TABLE IF NOT EXISTS app_user_sessions (
+                "Id" uuid NOT NULL PRIMARY KEY,
+                "UserId" uuid NOT NULL REFERENCES app_users ("Id") ON DELETE CASCADE,
+                "TokenHash" varchar(128) NOT NULL,
+                "CreatedAt" timestamp with time zone NOT NULL,
+                "ExpiresAt" timestamp with time zone NOT NULL,
+                "RevokedAt" timestamp with time zone
+            );
+
+            CREATE UNIQUE INDEX IF NOT EXISTS "UX_app_user_sessions_TokenHash" ON app_user_sessions ("TokenHash");
+            CREATE INDEX IF NOT EXISTS "IX_app_user_sessions_User_Expires" ON app_user_sessions ("UserId", "ExpiresAt");
+
+            INSERT INTO app_roles ("Id", "RoleCode", "RoleName", "Description", "CreatedAt")
+            VALUES
+                ('00000000-0000-0000-0000-000000000001', 'admin', '系统管理员', '拥有平台全部访问和管理权限', now()),
+                ('00000000-0000-0000-0000-000000000002', 'viewer', '数据浏览员', '可查看工程、地图、病害和图像数据', now())
+            ON CONFLICT ("RoleCode") DO NOTHING;
+
+            INSERT INTO app_permissions ("Id", "PermissionCode", "PermissionName", "Description", "CreatedAt")
+            VALUES
+                ('00000000-0000-0000-0000-000000000101', 'project:view', '查看工程', '查看工程线路、采集期次和站点区间', now()),
+                ('00000000-0000-0000-0000-000000000102', 'data:view', '查看数据', '查看病害、灰度图、点云和文件树数据', now()),
+                ('00000000-0000-0000-0000-000000000103', 'data:import', '导入数据', '同步台账和上传检测数据', now()),
+                ('00000000-0000-0000-0000-000000000104', 'user:manage', '用户管理', '管理用户、角色和权限', now())
+            ON CONFLICT ("PermissionCode") DO NOTHING;
+
+            INSERT INTO app_role_permissions ("RoleId", "PermissionId")
+            SELECT r."Id", p."Id"
+            FROM app_roles r
+            CROSS JOIN app_permissions p
+            WHERE r."RoleCode" = 'admin'
+            ON CONFLICT DO NOTHING;
+
+            INSERT INTO app_role_permissions ("RoleId", "PermissionId")
+            SELECT r."Id", p."Id"
+            FROM app_roles r
+            JOIN app_permissions p ON p."PermissionCode" IN ('project:view', 'data:view')
+            WHERE r."RoleCode" = 'viewer'
+            ON CONFLICT DO NOTHING;
+            """,
+            """
             CREATE TABLE IF NOT EXISTS project_instances (
                 "Id" uuid NOT NULL PRIMARY KEY,
                 "ProjectId" uuid NOT NULL REFERENCES projects ("Id") ON DELETE CASCADE,
@@ -108,6 +194,8 @@ internal static class DatabaseSchemaInitializer
                 "DisplayName" varchar(256) NOT NULL,
                 "BegStation" varchar(128),
                 "EndStation" varchar(128),
+                "BeginGps" varchar(64) NOT NULL DEFAULT '',
+                "EndGps" varchar(64) NOT NULL DEFAULT '',
                 "BegMileage" double precision NOT NULL,
                 "EndMileage" double precision NOT NULL,
                 "LineName" varchar(256),
@@ -167,6 +255,8 @@ internal static class DatabaseSchemaInitializer
                 ADD COLUMN IF NOT EXISTS "Reserved6" varchar(256);
 
             ALTER TABLE "STATION"
+                ADD COLUMN IF NOT EXISTS "BeginGps" varchar(64) NOT NULL DEFAULT '',
+                ADD COLUMN IF NOT EXISTS "EndGps" varchar(64) NOT NULL DEFAULT '',
                 ADD COLUMN IF NOT EXISTS "TunnelWidth" double precision,
                 ADD COLUMN IF NOT EXISTS "TunnelHeight" double precision,
                 ADD COLUMN IF NOT EXISTS "Remark" varchar(1024) NOT NULL DEFAULT '',

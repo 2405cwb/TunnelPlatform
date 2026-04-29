@@ -14,6 +14,67 @@ CREATE TABLE IF NOT EXISTS projects (
 CREATE UNIQUE INDEX IF NOT EXISTS "UX_projects_ProjectName"
 ON projects ("ProjectName");
 
+-- 用户权限管理：运行时同步创建，首个注册用户自动授予系统管理员角色。
+CREATE TABLE IF NOT EXISTS app_users (
+    "Id" uuid PRIMARY KEY,
+    "UserName" varchar(64) NOT NULL,
+    "DisplayName" varchar(128) NOT NULL DEFAULT '',
+    "PasswordHash" varchar(256) NOT NULL,
+    "PasswordSalt" varchar(128) NOT NULL,
+    "IsActive" boolean NOT NULL DEFAULT TRUE,
+    "CreatedAt" timestamptz NOT NULL,
+    "LastLoginAt" timestamptz
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS "UX_app_users_UserName"
+ON app_users ("UserName");
+
+CREATE TABLE IF NOT EXISTS app_roles (
+    "Id" uuid PRIMARY KEY,
+    "RoleCode" varchar(64) NOT NULL,
+    "RoleName" varchar(128) NOT NULL,
+    "Description" varchar(512) NOT NULL DEFAULT '',
+    "CreatedAt" timestamptz NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS "UX_app_roles_RoleCode"
+ON app_roles ("RoleCode");
+
+CREATE TABLE IF NOT EXISTS app_permissions (
+    "Id" uuid PRIMARY KEY,
+    "PermissionCode" varchar(128) NOT NULL,
+    "PermissionName" varchar(128) NOT NULL,
+    "Description" varchar(512) NOT NULL DEFAULT '',
+    "CreatedAt" timestamptz NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS "UX_app_permissions_PermissionCode"
+ON app_permissions ("PermissionCode");
+
+CREATE TABLE IF NOT EXISTS app_user_roles (
+    "UserId" uuid NOT NULL REFERENCES app_users ("Id") ON DELETE CASCADE,
+    "RoleId" uuid NOT NULL REFERENCES app_roles ("Id") ON DELETE CASCADE,
+    PRIMARY KEY ("UserId", "RoleId")
+);
+
+CREATE TABLE IF NOT EXISTS app_role_permissions (
+    "RoleId" uuid NOT NULL REFERENCES app_roles ("Id") ON DELETE CASCADE,
+    "PermissionId" uuid NOT NULL REFERENCES app_permissions ("Id") ON DELETE CASCADE,
+    PRIMARY KEY ("RoleId", "PermissionId")
+);
+
+CREATE TABLE IF NOT EXISTS app_user_sessions (
+    "Id" uuid PRIMARY KEY,
+    "UserId" uuid NOT NULL REFERENCES app_users ("Id") ON DELETE CASCADE,
+    "TokenHash" varchar(128) NOT NULL,
+    "CreatedAt" timestamptz NOT NULL,
+    "ExpiresAt" timestamptz NOT NULL,
+    "RevokedAt" timestamptz
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS "UX_app_user_sessions_TokenHash"
+ON app_user_sessions ("TokenHash");
+
 CREATE TABLE IF NOT EXISTS project_instances (
     "Id" uuid PRIMARY KEY,
     "ProjectId" uuid NOT NULL REFERENCES projects ("Id") ON DELETE CASCADE,
@@ -38,6 +99,8 @@ CREATE TABLE IF NOT EXISTS "STATION" (
     "CollectionDate" date NOT NULL,
     "BegStation" varchar(128) NOT NULL,
     "EndStation" varchar(128) NOT NULL,
+    "BeginGps" varchar(64) NOT NULL DEFAULT '',
+    "EndGps" varchar(64) NOT NULL DEFAULT '',
     "BegMileage" double precision NOT NULL,
     "EndMileage" double precision NOT NULL,
     "StationType" integer NOT NULL,

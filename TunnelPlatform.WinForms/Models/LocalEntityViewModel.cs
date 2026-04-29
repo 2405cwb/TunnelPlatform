@@ -17,6 +17,10 @@ public sealed class LocalEntityViewModel
 
     public string EndStation { get; init; } = string.Empty;
 
+    public string BeginGps { get; init; } = string.Empty;
+
+    public string EndGps { get; init; } = string.Empty;
+
     public double BeginMileage { get; init; }
 
     public double EndMileage { get; init; }

@@ -1,6 +1,12 @@
 const state = {
+    authMode: "login",
+    captchaId: null,
+    token: localStorage.getItem("tunnel-auth-token") || "",
+    user: null,
     projects: [],
+    launchProjectId: null,
     projectId: null,
+    pendingEntityId: null,
     entities: [],
     entityId: null,
     overview: null,
@@ -19,7 +25,13 @@ const state = {
     diseasePreviewMode: "exact",
     activeView: "image",
     wheelBusy: false,
+    imageWheelDelta: 0,
+    imageWheelFrame: null,
+    imageScrollTimer: null,
     projectLoadId: 0,
+    map: null,
+    mapReady: false,
+    mapOverlays: [],
 };
 
 const apiCatalog = [
@@ -37,13 +49,30 @@ const apiCatalog = [
 const $ = (id) => document.getElementById(id);
 
 async function requestJson(url) {
-    const response = await fetch(url);
+    const headers = state.token ? { Authorization: `Bearer ${state.token}` } : {};
+    const response = await fetch(url, { headers });
     if (!response.ok) {
         const error = await response.json().catch(() => ({ message: response.statusText }));
         throw new Error(error.message || response.statusText);
     }
 
     return response.json();
+}
+
+async function postJson(url, body) {
+    const headers = { "Content-Type": "application/json" };
+    if (state.token) headers.Authorization = `Bearer ${state.token}`;
+    const response = await fetch(url, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body ?? {}),
+    });
+    if (!response.ok) {
+        const error = await response.json().catch(() => ({ message: response.statusText }));
+        throw new Error(error.message || response.statusText);
+    }
+
+    return response.status === 204 ? null : response.json();
 }
 
 function formatNumber(value, digits = 2) {
@@ -58,15 +87,123 @@ function showToast(message) {
     showToast.timer = window.setTimeout(() => toast.classList.remove("show"), 2600);
 }
 
+async function initializeAuth() {
+    if (state.token) {
+        try {
+            state.user = await requestJson("/api/auth/me");
+            showLaunch();
+            await loadProjects();
+            return;
+        } catch {
+            localStorage.removeItem("tunnel-auth-token");
+            state.token = "";
+        }
+    }
+
+    showAuth();
+    await refreshCaptcha();
+}
+
+function showAuth() {
+    $("authScreen").classList.remove("hidden");
+    $("launchScreen").classList.add("hidden");
+    document.querySelector(".shell").classList.add("hidden");
+}
+
+function showLaunch() {
+    $("authScreen").classList.add("hidden");
+    $("launchScreen").classList.remove("hidden");
+    document.querySelector(".shell").classList.add("hidden");
+    window.setTimeout(() => {
+        if (state.mapReady && state.map) {
+            state.map.checkResize?.();
+            renderProjectMap();
+        }
+    }, 80);
+}
+
+function showDetail() {
+    $("authScreen").classList.add("hidden");
+    $("launchScreen").classList.add("hidden");
+    document.querySelector(".shell").classList.remove("hidden");
+}
+
+function setAuthMode(mode) {
+    state.authMode = mode;
+    $("loginModeButton").classList.toggle("active", mode === "login");
+    $("registerModeButton").classList.toggle("active", mode === "register");
+    $("authSubmitButton").textContent = mode === "login" ? "登录平台" : "注册并进入";
+}
+
+async function refreshCaptcha() {
+    try {
+        const captcha = await requestJson("/api/auth/captcha");
+        state.captchaId = captcha.captchaId;
+        $("captchaImage").src = captcha.imageDataUrl;
+        $("captchaCode").value = "";
+    } catch (error) {
+        showToast(error.message);
+    }
+}
+
+async function submitAuth(event) {
+    event.preventDefault();
+    const payload = {
+        userName: $("authUserName").value,
+        password: $("authPassword").value,
+        captchaId: state.captchaId,
+        captchaCode: $("captchaCode").value,
+    };
+
+    try {
+        const result = await postJson(state.authMode === "login" ? "/api/auth/login" : "/api/auth/register", payload);
+        state.token = result.token;
+        state.user = result.user;
+        localStorage.setItem("tunnel-auth-token", result.token);
+        showToast(`${state.user.displayName}，欢迎进入平台`);
+        showLaunch();
+        await loadProjects();
+    } catch (error) {
+        showToast(error.message);
+        await refreshCaptcha();
+    }
+}
+
+async function logout() {
+    try {
+        if (state.token) {
+            await postJson("/api/auth/logout");
+        }
+    } catch {
+        // 本地退出优先，后端会话过期时不阻塞界面。
+    }
+
+    state.token = "";
+    state.user = null;
+    localStorage.removeItem("tunnel-auth-token");
+    showAuth();
+    await refreshCaptcha();
+}
+
 async function initialize() {
     applyTheme(localStorage.getItem("tunnel-theme") || "dark");
     bindEvents();
     renderApiCatalog();
-    await loadProjects();
+    initializeProjectMap();
+    await initializeAuth();
 }
 
 function bindEvents() {
-    $("refreshButton").addEventListener("click", () => loadProjects(state.projectId));
+    $("loginModeButton").addEventListener("click", () => setAuthMode("login"));
+    $("registerModeButton").addEventListener("click", () => setAuthMode("register"));
+    $("captchaButton").addEventListener("click", refreshCaptcha);
+    $("authForm").addEventListener("submit", submitAuth);
+    $("lineSelect").addEventListener("change", handleLineSelectChange);
+    $("dateSelect").addEventListener("change", (event) => previewProject(event.target.value));
+    $("enterProjectButton").addEventListener("click", () => openProjectDetail(state.launchProjectId));
+    $("logoutButton").addEventListener("click", logout);
+    $("backToMapButton").addEventListener("click", showLaunch);
+    $("refreshButton").addEventListener("click", () => state.projectId ? selectProject(state.projectId) : loadProjects());
     $("projectSelect").addEventListener("change", (event) => selectProject(event.target.value));
     $("themeSelect").addEventListener("change", (event) => applyTheme(event.target.value));
     $("prevImageButton").addEventListener("click", () => selectImage(state.imageIndex - 1));
@@ -85,6 +222,10 @@ function bindEvents() {
     $("pointCloudSlider").addEventListener("input", (event) => selectPointCloudFrame(Number(event.target.value)));
     $("closeDialogButton").addEventListener("click", () => $("imageDialog").close());
     $("imageStage").addEventListener("wheel", handleImageWheel, { passive: false });
+    $("imageStage").addEventListener("scroll", syncImageIndexFromScroll, { passive: true });
+    $("thumbnailProgress").addEventListener("pointermove", handleProgressHover);
+    $("thumbnailProgress").addEventListener("pointerleave", hideProgressPreview);
+    $("thumbnailProgress").addEventListener("click", handleProgressClick);
     $("pointCloudStage").addEventListener("wheel", handlePointCloudWheel, { passive: false });
 }
 
@@ -100,7 +241,7 @@ function setActiveView(view) {
     $("pointCloudViewTab").classList.toggle("active", view === "pointcloud");
     $("imageStage").classList.toggle("active", view === "image");
     $("pointCloudStage").classList.toggle("active", view === "pointcloud");
-    $("imageTimeline").style.display = view === "image" ? "flex" : "none";
+    $("imageTimeline").style.display = view === "image" ? "grid" : "none";
     $("prevImageButton").style.display = view === "image" ? "inline-flex" : "none";
     $("nextImageButton").style.display = view === "image" ? "inline-flex" : "none";
     $("ringToggle").closest(".switch").style.display = view === "image" ? "inline-flex" : "none";
@@ -109,21 +250,23 @@ function setActiveView(view) {
 }
 
 function handleImageWheel(event) {
-    if (state.grayImages.length <= 1) {
+    const stage = $("imageStage");
+    if (state.grayImages.length <= 1 || !stage) {
         return;
     }
 
     event.preventDefault();
-    if (state.wheelBusy) {
+    state.imageWheelDelta += (event.deltaY || event.deltaX) * 1.15;
+
+    if (state.imageWheelFrame !== null) {
         return;
     }
 
-    state.wheelBusy = true;
-    window.setTimeout(() => {
-        state.wheelBusy = false;
-    }, 180);
-
-    selectImage(state.imageIndex + (event.deltaY > 0 ? 1 : -1));
+    state.imageWheelFrame = window.requestAnimationFrame(() => {
+        stage.scrollLeft += state.imageWheelDelta;
+        state.imageWheelDelta = 0;
+        state.imageWheelFrame = null;
+    });
 }
 
 function handlePointCloudWheel(event) {
@@ -148,12 +291,13 @@ async function loadProjects(preferredProjectId) {
     try {
         state.projects = await requestJson("/api/query/project-instances");
         renderProjects();
+        renderLaunchProjectControls(preferredProjectId);
         const nextProjectId = preferredProjectId && state.projects.some((x) => x.projectId === preferredProjectId)
             ? preferredProjectId
             : state.projects[0]?.projectId;
 
         if (nextProjectId) {
-            await selectProject(nextProjectId);
+            await previewProject(nextProjectId);
         } else {
             resetProjectView();
         }
@@ -162,7 +306,44 @@ async function loadProjects(preferredProjectId) {
     }
 }
 
+async function previewProject(projectId) {
+    if (!projectId) {
+        return;
+    }
+
+    state.launchProjectId = projectId;
+    renderProjects();
+    renderLaunchProjectControls(projectId);
+
+    try {
+        const [overview, entities, projectDiseaseStats] = await Promise.all([
+            requestJson(`/api/query/projects/${projectId}/overview`),
+            requestJson(`/api/query/projects/${projectId}/entities`),
+            requestJson(`/api/query/projects/${projectId}/disease-statistics`),
+        ]);
+
+        state.overview = overview;
+        state.entities = entities;
+        state.projectDiseaseStats = projectDiseaseStats;
+        renderLaunchSummary();
+        renderProjectMap();
+    } catch (error) {
+        showToast(error.message);
+    }
+}
+
+async function openProjectDetail(projectId) {
+    if (!projectId) {
+        showToast("请先选择工程期次");
+        return;
+    }
+
+    showDetail();
+    await selectProject(projectId);
+}
+
 async function selectProject(projectId) {
+    showDetail();
     const loadId = ++state.projectLoadId;
     state.projectId = projectId;
     state.entityId = null;
@@ -184,9 +365,12 @@ async function selectProject(projectId) {
         state.projectDiseaseStats = projectDiseaseStats;
         renderSummary();
         renderEntities();
+        renderProjectMap();
         renderDiseaseTypeFilter(projectDiseaseStats);
 
-        const uploaded = entities.find((x) => x.hasUploadedData) || entities[0];
+        const pending = state.pendingEntityId && entities.find((x) => x.entityId === state.pendingEntityId);
+        state.pendingEntityId = null;
+        const uploaded = pending || entities.find((x) => x.hasUploadedData) || entities[0];
         if (uploaded) {
             await selectEntity(uploaded.entityId);
         } else {
@@ -362,8 +546,12 @@ async function selectImage(index) {
 
     state.imageIndex = (index + state.grayImages.length) % state.grayImages.length;
     state.diseasePreviewMode = "exact";
+    scrollToImage(state.imageIndex, true);
     await loadRingsForCurrentImage();
-    renderImageViewer();
+    renderImageProgress();
+    renderRingOverlay();
+    renderDiseaseOverlay();
+    updateViewerMeta();
 }
 
 function selectPointCloudFrame(index) {
@@ -381,6 +569,7 @@ function setStatsScope(scope) {
 function renderProjects() {
     const select = $("projectSelect");
     $("projectCount").textContent = state.projects.length;
+    $("projectInstanceCount").textContent = state.projects.length;
     select.innerHTML = state.projects
         .map((project) => {
             const selected = project.projectId === state.projectId ? " selected" : "";
@@ -391,6 +580,106 @@ function renderProjects() {
     if (state.projectId && state.projects.some((project) => project.projectId === state.projectId)) {
         select.value = state.projectId;
     }
+}
+
+function renderLaunchProjectControls(preferredProjectId) {
+    const lineSelect = $("lineSelect");
+    const dateSelect = $("dateSelect");
+    const groups = groupProjectsByLine();
+    const selected = state.projects.find((item) => item.projectId === (preferredProjectId || state.launchProjectId))
+        || state.projects[0];
+    const selectedLine = selected ? buildLineKey(selected) : "";
+
+    lineSelect.innerHTML = groups.map((group) => `
+        <option value="${escapeAttr(group.key)}"${group.key === selectedLine ? " selected" : ""}>${escapeHtml(group.label)}</option>
+    `).join("");
+
+    const currentGroup = groups.find((group) => group.key === (lineSelect.value || selectedLine)) || groups[0];
+    const projectOptions = currentGroup?.projects || [];
+    dateSelect.innerHTML = projectOptions.map((project) => `
+        <option value="${project.projectId}"${project.projectId === selected?.projectId ? " selected" : ""}>${project.collectionDate} · ${escapeHtml(project.direction)}</option>
+    `).join("");
+
+    if (preferredProjectId && projectOptions.some((project) => project.projectId === preferredProjectId)) {
+        dateSelect.value = preferredProjectId;
+    }
+
+    $("projectCards").innerHTML = state.projects.map((project) => `
+        <button class="project-card ${project.projectId === state.launchProjectId ? "active" : ""}" data-launch-project-id="${project.projectId}">
+            <strong>${escapeHtml(project.projectName)}</strong>
+            <span>${escapeHtml(project.direction)} · ${project.collectionDate} · ${project.uploadedEntityCount}/${project.entityCount} 已上传</span>
+        </button>
+    `).join("");
+
+    document.querySelectorAll("[data-launch-project-id]").forEach((button) => {
+        button.addEventListener("click", () => previewProject(button.dataset.launchProjectId));
+        button.addEventListener("dblclick", () => openProjectDetail(button.dataset.launchProjectId));
+    });
+}
+
+function handleLineSelectChange() {
+    const groups = groupProjectsByLine();
+    const group = groups.find((item) => item.key === $("lineSelect").value);
+    const projectId = group?.projects[0]?.projectId;
+    renderLaunchProjectControls(projectId);
+    if (projectId) {
+        previewProject(projectId);
+    }
+}
+
+function groupProjectsByLine() {
+    const map = new Map();
+    for (const project of state.projects) {
+        const key = buildLineKey(project);
+        if (!map.has(key)) {
+            map.set(key, {
+                key,
+                label: `${project.projectName} · ${project.direction}`,
+                projects: [],
+            });
+        }
+
+        map.get(key).projects.push(project);
+    }
+
+    return [...map.values()]
+        .map((group) => ({
+            ...group,
+            projects: group.projects.sort((a, b) => String(b.collectionDate).localeCompare(String(a.collectionDate))),
+        }))
+        .sort((a, b) => a.label.localeCompare(b.label, "zh-CN"));
+}
+
+function buildLineKey(project) {
+    return `${project.projectName}|${project.direction}`;
+}
+
+function renderLaunchSummary() {
+    const overview = state.overview;
+    if (!overview) {
+        $("launchSummary").innerHTML = "";
+        $("entityCountLaunch").textContent = "0";
+        return;
+    }
+
+    $("entityCountLaunch").textContent = overview.project.entityCount;
+    $("launchMapTitle").textContent = overview.project.displayName || overview.project.projectName;
+    const stats = [
+        ["站点区间", overview.project.entityCount],
+        ["已上传", overview.project.uploadedEntityCount],
+        ["病害", overview.diseaseCount],
+        ["灰度图", overview.grayImageCount],
+        ["环片", overview.ringCount],
+        ["点云", overview.pointCloudFileCount],
+    ];
+
+    $("launchSummary").innerHTML = `
+        <div class="launch-line-title">${escapeHtml(overview.project.projectName)}</div>
+        <div class="item-meta">${escapeHtml(overview.project.direction)} · ${overview.project.collectionDate} · ${formatNumber(overview.mileageRange.minMileage, 0)}-${formatNumber(overview.mileageRange.maxMileage, 0)}</div>
+        <div class="launch-metrics">
+            ${stats.map(([label, value]) => `<div><span>${label}</span><strong>${value}</strong></div>`).join("")}
+        </div>
+    `;
 }
 
 function renderEntities() {
@@ -405,6 +694,135 @@ function renderEntities() {
     document.querySelectorAll("[data-entity-id]").forEach((button) => {
         button.addEventListener("click", () => selectEntity(button.dataset.entityId));
     });
+}
+
+function initializeProjectMap() {
+    if (!window.T || !$("projectMap")) {
+        $("mapMeta").textContent = "地图脚本未加载，仍可通过左侧列表查看站点";
+        return;
+    }
+
+    state.map = new T.Map("projectMap");
+    state.map.centerAndZoom(new T.LngLat(116.1705, 39.924), 14);
+    state.map.enableScrollWheelZoom();
+    state.mapReady = true;
+}
+
+function renderProjectMap() {
+    if (!$("mapMeta") || !$("mapLegend")) {
+        return;
+    }
+
+    $("mapLegend").innerHTML = `
+        <span>站点</span>
+        <span>区间连线</span>
+    `;
+
+    if (!state.mapReady || !state.map) {
+        $("mapMeta").textContent = "地图暂不可用";
+        return;
+    }
+
+    state.map.clearOverLays();
+    state.mapOverlays = [];
+
+    const entitiesWithPoints = state.entities
+        .map((entity) => ({
+            entity,
+            begin: parseGps(entity.beginGps),
+            end: parseGps(entity.endGps),
+        }))
+        .filter((item) => item.begin || item.end);
+
+    if (entitiesWithPoints.length === 0) {
+        $("mapMeta").textContent = "当前工程暂无 GPS 坐标";
+        state.map.centerAndZoom(new T.LngLat(116.1705, 39.924), 13);
+        return;
+    }
+
+    const allPoints = [];
+    const stationMap = new Map();
+
+    for (const item of entitiesWithPoints) {
+        if (item.begin && item.end && (item.begin.lng !== item.end.lng || item.begin.lat !== item.end.lat)) {
+            const line = new T.Polyline(
+                [new T.LngLat(item.begin.lng, item.begin.lat), new T.LngLat(item.end.lng, item.end.lat)],
+                { color: "#27b7d6", weight: 5, opacity: 0.76, lineStyle: "solid" });
+            state.map.addOverLay(line);
+            state.mapOverlays.push(line);
+        }
+
+        addStationPoint(stationMap, item.entity.beginStation, item.begin, item.entity);
+        addStationPoint(stationMap, item.entity.endStation, item.end, item.entity);
+    }
+
+    for (const station of stationMap.values()) {
+        const point = new T.LngLat(station.lng, station.lat);
+        const marker = new T.Marker(point);
+        marker.addEventListener("click", () => {
+            const entity = station.entities.find((x) => x.hasUploadedData) || station.entities[0];
+            if (entity) {
+                state.pendingEntityId = entity.entityId;
+                openProjectDetail(state.launchProjectId || state.projectId);
+            }
+            marker.openInfoWindow(new T.InfoWindow(buildMapPopup(station), { offset: new T.Point(0, -24) }));
+        });
+        state.map.addOverLay(marker);
+        state.mapOverlays.push(marker);
+        allPoints.push(point);
+    }
+
+    if (allPoints.length === 1) {
+        state.map.centerAndZoom(allPoints[0], 15);
+    } else {
+        state.map.setViewport(allPoints);
+    }
+
+    const project = state.projects.find((item) => item.projectId === (state.launchProjectId || state.projectId));
+    $("mapMeta").textContent = `${project?.displayName || "当前工程"} · ${stationMap.size} 个站点 · ${state.entities.length} 个实体`;
+}
+
+function addStationPoint(stationMap, name, gps, entity) {
+    if (!gps) {
+        return;
+    }
+
+    const key = `${name || entity.displayName}|${gps.lng.toFixed(6)},${gps.lat.toFixed(6)}`;
+    const existing = stationMap.get(key);
+    if (existing) {
+        existing.entities.push(entity);
+        return;
+    }
+
+    stationMap.set(key, {
+        name: name || entity.displayName,
+        lng: gps.lng,
+        lat: gps.lat,
+        entities: [entity],
+    });
+}
+
+function buildMapPopup(station) {
+    const first = station.entities[0];
+    return `
+        <div class="map-popup">
+            <strong>${escapeHtml(station.name)}</strong>
+            <div>${station.lng.toFixed(6)}, ${station.lat.toFixed(6)}</div>
+            <div>${station.entities.length} 个关联站点/区间</div>
+            <div>${escapeHtml(first?.displayName || "")}</div>
+        </div>
+    `;
+}
+
+function parseGps(value) {
+    const match = String(value || "").match(/(-?\d+(?:\.\d+)?)\s*[,，]\s*(-?\d+(?:\.\d+)?)/);
+    if (!match) {
+        return null;
+    }
+
+    const lng = Number(match[1]);
+    const lat = Number(match[2]);
+    return Number.isFinite(lng) && Number.isFinite(lat) ? { lng, lat } : null;
 }
 
 function renderSummary() {
@@ -481,30 +899,131 @@ function renderDiseaseTypeFilter(stats) {
 
 function renderImageViewer() {
     const image = state.grayImages[state.imageIndex];
-    const img = $("grayImage");
+    const strip = $("imageStrip");
     $("imageEmpty").style.display = image ? "none" : "block";
-    img.style.display = image ? "block" : "none";
-
-    if (image) {
-        img.src = image.fileUrl;
-    } else {
-        img.removeAttribute("src");
-    }
-
-    $("imageTimeline").innerHTML = state.grayImages.map((item, index) => `
-        <div class="tick ${index === state.imageIndex ? "active" : ""}" data-image-index="${index}">
-            <strong>${escapeHtml(item.fileName)}</strong>
-            <span>${formatNumber(item.beginMileage, 3)}-${formatNumber(item.endMileage, 3)}</span>
-        </div>
+    strip.style.display = image ? "flex" : "none";
+    strip.innerHTML = state.grayImages.map((item, index) => `
+        <img class="strip-image" src="${escapeAttr(item.fileUrl)}" alt="${escapeAttr(item.fileName)}" data-strip-index="${index}">
+    `).join("");
+    $("thumbnailStrip").innerHTML = state.grayImages.map((item, index) => `
+        <img class="thumbnail-segment" src="${escapeAttr(item.fileUrl)}" alt="" data-thumbnail-index="${index}">
     `).join("");
 
-    document.querySelectorAll("[data-image-index]").forEach((tick) => {
-        tick.addEventListener("click", () => selectImage(Number(tick.dataset.imageIndex)));
+    window.requestAnimationFrame(() => {
+        scrollToImage(state.imageIndex, false);
+        renderImageProgress();
     });
 
     renderRingOverlay();
     renderDiseaseOverlay();
     updateViewerMeta();
+}
+
+function scrollToImage(index, smooth) {
+    const stage = $("imageStage");
+    const item = document.querySelector(`[data-strip-index="${index}"]`);
+    if (!stage || !item) {
+        return;
+    }
+
+    const targetLeft = item.offsetLeft - Math.max(0, (stage.clientWidth - item.clientWidth) / 2);
+    stage.scrollTo({ left: Math.max(0, targetLeft), behavior: smooth ? "smooth" : "auto" });
+}
+
+function syncImageIndexFromScroll() {
+    window.clearTimeout(state.imageScrollTimer);
+    renderImageProgress();
+    state.imageScrollTimer = window.setTimeout(async () => {
+        const nextIndex = getImageIndexAtViewportCenter();
+        if (nextIndex === state.imageIndex || nextIndex < 0) {
+            return;
+        }
+
+        state.imageIndex = nextIndex;
+        state.diseasePreviewMode = "exact";
+        await loadRingsForCurrentImage();
+        renderImageProgress();
+        renderRingOverlay();
+        renderDiseaseOverlay();
+        updateViewerMeta();
+    }, 90);
+}
+
+function getImageIndexAtViewportCenter() {
+    const stage = $("imageStage");
+    const images = [...document.querySelectorAll("[data-strip-index]")];
+    if (!stage || images.length === 0) {
+        return -1;
+    }
+
+    const center = stage.scrollLeft + stage.clientWidth / 2;
+    let bestIndex = 0;
+    let bestDistance = Number.POSITIVE_INFINITY;
+    images.forEach((item) => {
+        const itemCenter = item.offsetLeft + item.clientWidth / 2;
+        const distance = Math.abs(itemCenter - center);
+        if (distance < bestDistance) {
+            bestDistance = distance;
+            bestIndex = Number(item.dataset.stripIndex);
+        }
+    });
+
+    return bestIndex;
+}
+
+function renderImageProgress() {
+    const stage = $("imageStage");
+    const frame = $("thumbnailActiveFrame");
+    const totalWidth = Math.max(1, stage?.scrollWidth || 1);
+    const visibleWidth = Math.min(totalWidth, stage?.clientWidth || totalWidth);
+    const leftRatio = stage ? Math.min(1, Math.max(0, stage.scrollLeft / totalWidth)) : 0;
+    const widthRatio = Math.min(1, Math.max(0.04, visibleWidth / totalWidth));
+
+    frame.style.left = `${leftRatio * 100}%`;
+    frame.style.width = `${widthRatio * 100}%`;
+}
+
+function handleProgressHover(event) {
+    if (!state.grayImages.length) {
+        return;
+    }
+
+    const { ratio, x } = getProgressPointer(event);
+    const index = getImageIndexByRatio(ratio);
+    const image = state.grayImages[index];
+    const preview = $("imageProgressPreview");
+    $("imageProgressPreviewImg").src = image.fileUrl;
+    $("imageProgressPreviewText").textContent = `${image.fileName} · ${formatNumber(image.beginMileage, 1)}-${formatNumber(image.endMileage, 1)}`;
+    preview.style.left = `${x}px`;
+    preview.classList.add("show");
+}
+
+function hideProgressPreview() {
+    $("imageProgressPreview").classList.remove("show");
+}
+
+function handleProgressClick(event) {
+    if (!state.grayImages.length) {
+        return;
+    }
+
+    const { ratio } = getProgressPointer(event);
+    const index = getImageIndexByRatio(ratio);
+    selectImage(index);
+}
+
+function getProgressPointer(event) {
+    const rect = $("thumbnailProgress").getBoundingClientRect();
+    const x = Math.min(rect.width, Math.max(0, event.clientX - rect.left));
+    return {
+        x,
+        ratio: rect.width <= 0 ? 0 : x / rect.width,
+    };
+}
+
+function getImageIndexByRatio(ratio) {
+    const index = Math.round(Math.min(1, Math.max(0, ratio)) * (state.grayImages.length - 1));
+    return Math.max(0, Math.min(state.grayImages.length - 1, index));
 }
 
 function renderRingOverlay() {
@@ -808,7 +1327,7 @@ function renderApiCatalog() {
 function resetProjectView() {
     state.overview = null;
     state.entities = [];
-    state.projectDiseaseStats = [];
+        state.projectDiseaseStats = [];
     state.entityDiseaseStats = [];
     state.diseases = [];
     state.grayImages = [];
@@ -817,6 +1336,7 @@ function resetProjectView() {
     $("projectInfo").innerHTML = "";
     $("summaryStrip").innerHTML = "";
     renderEntities();
+    renderProjectMap();
     renderDiseaseStats();
     renderImageViewer();
     renderDiseaseRows();

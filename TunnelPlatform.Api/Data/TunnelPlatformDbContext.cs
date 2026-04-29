@@ -12,6 +12,18 @@ public sealed class TunnelPlatformDbContext : DbContext
 
     public DbSet<Project> Projects => Set<Project>();
 
+    public DbSet<AppUser> AppUsers => Set<AppUser>();
+
+    public DbSet<AppRole> AppRoles => Set<AppRole>();
+
+    public DbSet<AppPermission> AppPermissions => Set<AppPermission>();
+
+    public DbSet<AppUserRole> AppUserRoles => Set<AppUserRole>();
+
+    public DbSet<AppRolePermission> AppRolePermissions => Set<AppRolePermission>();
+
+    public DbSet<AppUserSession> AppUserSessions => Set<AppUserSession>();
+
     public DbSet<CollectionBatch> CollectionBatches => Set<CollectionBatch>();
 
     public DbSet<Station> Stations => Set<Station>();
@@ -58,6 +70,78 @@ public sealed class TunnelPlatformDbContext : DbContext
             entity.Property(x => x.Reserved6).HasMaxLength(256);
         });
 
+        modelBuilder.Entity<AppUser>(entity =>
+        {
+            entity.ToTable("app_users");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.UserName).HasMaxLength(64);
+            entity.Property(x => x.DisplayName).HasMaxLength(128);
+            entity.Property(x => x.PasswordHash).HasMaxLength(256);
+            entity.Property(x => x.PasswordSalt).HasMaxLength(128);
+            entity.HasIndex(x => x.UserName).IsUnique();
+        });
+
+        modelBuilder.Entity<AppRole>(entity =>
+        {
+            entity.ToTable("app_roles");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.RoleCode).HasMaxLength(64);
+            entity.Property(x => x.RoleName).HasMaxLength(128);
+            entity.Property(x => x.Description).HasMaxLength(512);
+            entity.HasIndex(x => x.RoleCode).IsUnique();
+        });
+
+        modelBuilder.Entity<AppPermission>(entity =>
+        {
+            entity.ToTable("app_permissions");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.PermissionCode).HasMaxLength(128);
+            entity.Property(x => x.PermissionName).HasMaxLength(128);
+            entity.Property(x => x.Description).HasMaxLength(512);
+            entity.HasIndex(x => x.PermissionCode).IsUnique();
+        });
+
+        modelBuilder.Entity<AppUserRole>(entity =>
+        {
+            entity.ToTable("app_user_roles");
+            entity.HasKey(x => new { x.UserId, x.RoleId });
+            entity.HasOne(x => x.User)
+                .WithMany(x => x.UserRoles)
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Role)
+                .WithMany(x => x.UserRoles)
+                .HasForeignKey(x => x.RoleId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<AppRolePermission>(entity =>
+        {
+            entity.ToTable("app_role_permissions");
+            entity.HasKey(x => new { x.RoleId, x.PermissionId });
+            entity.HasOne(x => x.Role)
+                .WithMany(x => x.RolePermissions)
+                .HasForeignKey(x => x.RoleId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Permission)
+                .WithMany(x => x.RolePermissions)
+                .HasForeignKey(x => x.PermissionId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<AppUserSession>(entity =>
+        {
+            entity.ToTable("app_user_sessions");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.TokenHash).HasMaxLength(128);
+            entity.HasIndex(x => x.TokenHash).IsUnique();
+            entity.HasIndex(x => new { x.UserId, x.ExpiresAt });
+            entity.HasOne(x => x.User)
+                .WithMany(x => x.Sessions)
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
         modelBuilder.Entity<CollectionBatch>(entity =>
         {
             entity.ToTable("project_instances");
@@ -83,6 +167,8 @@ public sealed class TunnelPlatformDbContext : DbContext
             entity.Property(x => x.Id).HasColumnName("ID").ValueGeneratedNever();
             entity.Property(x => x.BegStation).HasMaxLength(128);
             entity.Property(x => x.EndStation).HasMaxLength(128);
+            entity.Property(x => x.BeginGps).HasMaxLength(64);
+            entity.Property(x => x.EndGps).HasMaxLength(64);
             entity.Property(x => x.BegMileage);
             entity.Property(x => x.EndMileage);
             entity.Property(x => x.LineName).HasMaxLength(256);

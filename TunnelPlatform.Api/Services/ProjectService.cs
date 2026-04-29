@@ -120,6 +120,8 @@ public sealed class ProjectService : IProjectService
                 station.CollectionDate = batch.CollectionDate;
                 station.BegStation = entry.BeginStation.Trim();
                 station.EndStation = entry.EndStation.Trim();
+                station.BeginGps = entry.BeginGps.Trim();
+                station.EndGps = entry.EndGps.Trim();
                 station.BegMileage = entry.BeginMileage;
                 station.EndMileage = entry.EndMileage;
                 station.StationType = entry.StationType;
@@ -159,6 +161,8 @@ public sealed class ProjectService : IProjectService
                 x.DisplayName,
                 BeginStation = x.BegStation,
                 x.EndStation,
+                x.BeginGps,
+                x.EndGps,
                 BeginMileage = x.BegMileage,
                 x.EndMileage,
                 x.StationType,
@@ -189,6 +193,8 @@ public sealed class ProjectService : IProjectService
             DisplayName = x.DisplayName,
             BeginStation = x.BeginStation,
             EndStation = x.EndStation,
+            BeginGps = x.BeginGps,
+            EndGps = x.EndGps,
             BeginMileage = x.BeginMileage,
             EndMileage = x.EndMileage,
             StationType = x.StationType,
