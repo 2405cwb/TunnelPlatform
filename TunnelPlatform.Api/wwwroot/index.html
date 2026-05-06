@@ -11,6 +11,16 @@
 <body>
     <section id="authScreen" class="auth-screen">
         <div class="auth-backdrop">
+            <div class="auth-intro">
+                <p class="eyebrow">Tunnel Digital Twin</p>
+                <h2><span>检测成果统一入库</span><span>与可视化</span></h2>
+                <p>把台账、SQLite、灰度图、病害高清图和点云目录收束到同一个工程视图。</p>
+                <div class="auth-proof">
+                    <span>POSTGRESQL</span>
+                    <span>WEBAPI</span>
+                    <span>WINFORMS</span>
+                </div>
+            </div>
             <div class="auth-card">
                 <p class="eyebrow">Secure Tunnel Console</p>
                 <h1>地铁隧道展示平台</h1>
@@ -142,13 +152,15 @@
                             <button id="imageViewTab" type="button" class="active" title="二维图像">二维图像</button>
                             <button id="pointCloudViewTab" type="button" title="点云断面">点云断面</button>
                         </div>
-                        <div class="toolbar-controls">
-                            <button id="prevImageButton" type="button" title="上一张">上一张</button>
-                            <button id="nextImageButton" type="button" title="下一张">下一张</button>
-                            <label class="switch">
-                                <input id="ringToggle" type="checkbox" checked>
-                                <span>环片</span>
-                            </label>
+                        <div class="viewer-actions">
+                            <div class="toolbar-controls">
+                                <button id="prevImageButton" type="button" title="上一张">上一张</button>
+                                <button id="nextImageButton" type="button" title="下一张">下一张</button>
+                                <label class="switch">
+                                    <input id="ringToggle" type="checkbox" checked>
+                                    <span>环片</span>
+                                </label>
+                            </div>
                         </div>
                     </div>
                     <div class="stage-stack">

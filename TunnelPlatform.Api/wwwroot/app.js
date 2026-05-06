@@ -28,11 +28,18 @@ const state = {
     imageWheelDelta: 0,
     imageWheelFrame: null,
     imageScrollTimer: null,
+    imageLoadId: 0,
+    progressPreviewIndex: -1,
     projectLoadId: 0,
     map: null,
     mapReady: false,
     mapOverlays: [],
 };
+
+const IMAGE_RENDER_RADIUS = 1;
+const DISEASE_ROW_RENDER_LIMIT = 600;
+const DISEASE_OVERLAY_LIMIT = 80;
+const RING_OVERLAY_LIMIT = 100;
 
 const apiCatalog = [
     ["GET", "/api/query/project-instances", "工程实例列表"],
@@ -217,14 +224,13 @@ function bindEvents() {
     $("diseaseTypeFilter").addEventListener("change", loadDiseases);
     $("mileageStart").addEventListener("change", loadDiseases);
     $("mileageEnd").addEventListener("change", loadDiseases);
+    $("diseaseRows").addEventListener("click", handleDiseaseRowClick);
+    $("diseaseRows").addEventListener("dblclick", handleDiseaseRowDoubleClick);
     $("entityStatsButton").addEventListener("click", () => setStatsScope("entity"));
     $("projectStatsButton").addEventListener("click", () => setStatsScope("project"));
     $("pointCloudSlider").addEventListener("input", (event) => selectPointCloudFrame(Number(event.target.value)));
     $("closeDialogButton").addEventListener("click", () => $("imageDialog").close());
     $("imageStage").addEventListener("wheel", handleImageWheel, { passive: false });
-    $("imageStage").addEventListener("scroll", syncImageIndexFromScroll, { passive: true });
-    $("thumbnailProgress").addEventListener("pointermove", handleProgressHover);
-    $("thumbnailProgress").addEventListener("pointerleave", hideProgressPreview);
     $("thumbnailProgress").addEventListener("click", handleProgressClick);
     $("pointCloudStage").addEventListener("wheel", handlePointCloudWheel, { passive: false });
 }
@@ -250,21 +256,23 @@ function setActiveView(view) {
 }
 
 function handleImageWheel(event) {
-    const stage = $("imageStage");
-    if (state.grayImages.length <= 1 || !stage) {
+    if (state.grayImages.length <= 1) {
         return;
     }
 
     event.preventDefault();
-    state.imageWheelDelta += (event.deltaY || event.deltaX) * 1.15;
+    state.imageWheelDelta += event.deltaY || event.deltaX || 0;
 
     if (state.imageWheelFrame !== null) {
         return;
     }
 
     state.imageWheelFrame = window.requestAnimationFrame(() => {
-        stage.scrollLeft += state.imageWheelDelta;
-        state.imageWheelDelta = 0;
+        const step = Math.trunc(state.imageWheelDelta / 90);
+        if (step !== 0) {
+            state.imageWheelDelta -= step * 90;
+            selectImage(state.imageIndex + Math.max(-4, Math.min(4, step)));
+        }
         state.imageWheelFrame = null;
     });
 }
@@ -388,6 +396,7 @@ async function selectProject(projectId) {
 async function selectEntity(entityId) {
     state.entityId = entityId;
     state.imageIndex = 0;
+    state.imageLoadId += 1;
     state.selectedDiseaseId = null;
     state.diseasePreviewMode = "exact";
     state.pointCloudFrames = [];
@@ -544,10 +553,19 @@ async function selectImage(index) {
         return;
     }
 
+    const loadId = ++state.imageLoadId;
     state.imageIndex = (index + state.grayImages.length) % state.grayImages.length;
     state.diseasePreviewMode = "exact";
-    scrollToImage(state.imageIndex, true);
+    renderImageWindow();
+    renderImageProgress();
+    updateViewerMeta();
+
     await loadRingsForCurrentImage();
+
+    if (loadId !== state.imageLoadId) {
+        return;
+    }
+
     renderImageProgress();
     renderRingOverlay();
     renderDiseaseOverlay();
@@ -902,15 +920,10 @@ function renderImageViewer() {
     const strip = $("imageStrip");
     $("imageEmpty").style.display = image ? "none" : "block";
     strip.style.display = image ? "flex" : "none";
-    strip.innerHTML = state.grayImages.map((item, index) => `
-        <img class="strip-image" src="${escapeAttr(item.fileUrl)}" alt="${escapeAttr(item.fileName)}" data-strip-index="${index}">
-    `).join("");
-    $("thumbnailStrip").innerHTML = state.grayImages.map((item, index) => `
-        <img class="thumbnail-segment" src="${escapeAttr(item.fileUrl)}" alt="" data-thumbnail-index="${index}">
-    `).join("");
+    renderImageWindow();
+    $("thumbnailStrip").innerHTML = "";
 
     window.requestAnimationFrame(() => {
-        scrollToImage(state.imageIndex, false);
         renderImageProgress();
     });
 
@@ -919,68 +932,43 @@ function renderImageViewer() {
     updateViewerMeta();
 }
 
-function scrollToImage(index, smooth) {
-    const stage = $("imageStage");
-    const item = document.querySelector(`[data-strip-index="${index}"]`);
-    if (!stage || !item) {
+function renderImageWindow() {
+    const strip = $("imageStrip");
+    if (!state.grayImages.length) {
+        strip.innerHTML = "";
         return;
     }
 
-    const targetLeft = item.offsetLeft - Math.max(0, (stage.clientWidth - item.clientWidth) / 2);
-    stage.scrollTo({ left: Math.max(0, targetLeft), behavior: smooth ? "smooth" : "auto" });
-}
+    const start = Math.max(0, state.imageIndex - IMAGE_RENDER_RADIUS);
+    const end = Math.min(state.grayImages.length, state.imageIndex + IMAGE_RENDER_RADIUS + 1);
+    const rows = [];
 
-function syncImageIndexFromScroll() {
-    window.clearTimeout(state.imageScrollTimer);
-    renderImageProgress();
-    state.imageScrollTimer = window.setTimeout(async () => {
-        const nextIndex = getImageIndexAtViewportCenter();
-        if (nextIndex === state.imageIndex || nextIndex < 0) {
-            return;
-        }
-
-        state.imageIndex = nextIndex;
-        state.diseasePreviewMode = "exact";
-        await loadRingsForCurrentImage();
-        renderImageProgress();
-        renderRingOverlay();
-        renderDiseaseOverlay();
-        updateViewerMeta();
-    }, 90);
-}
-
-function getImageIndexAtViewportCenter() {
-    const stage = $("imageStage");
-    const images = [...document.querySelectorAll("[data-strip-index]")];
-    if (!stage || images.length === 0) {
-        return -1;
+    for (let index = start; index < end; index += 1) {
+        const item = state.grayImages[index];
+        const priority = index === state.imageIndex ? "high" : "low";
+        rows.push(`
+            <img class="strip-image" src="${escapeAttr(item.fileUrl)}" alt="${escapeAttr(item.fileName)}" data-strip-index="${index}" loading="${index === state.imageIndex ? "eager" : "lazy"}" decoding="async" fetchpriority="${priority}">
+        `);
     }
 
-    const center = stage.scrollLeft + stage.clientWidth / 2;
-    let bestIndex = 0;
-    let bestDistance = Number.POSITIVE_INFINITY;
-    images.forEach((item) => {
-        const itemCenter = item.offsetLeft + item.clientWidth / 2;
-        const distance = Math.abs(itemCenter - center);
-        if (distance < bestDistance) {
-            bestDistance = distance;
-            bestIndex = Number(item.dataset.stripIndex);
-        }
-    });
-
-    return bestIndex;
+    strip.innerHTML = rows.join("");
 }
 
 function renderImageProgress() {
-    const stage = $("imageStage");
     const frame = $("thumbnailActiveFrame");
-    const totalWidth = Math.max(1, stage?.scrollWidth || 1);
-    const visibleWidth = Math.min(totalWidth, stage?.clientWidth || totalWidth);
-    const leftRatio = stage ? Math.min(1, Math.max(0, stage.scrollLeft / totalWidth)) : 0;
-    const widthRatio = Math.min(1, Math.max(0.04, visibleWidth / totalWidth));
+    const progress = $("thumbnailProgress");
+    const count = state.grayImages.length;
+    if (count === 0) {
+        frame.style.left = "0%";
+        frame.style.width = "0%";
+        progress.dataset.label = "0 / 0";
+        return;
+    }
 
-    frame.style.left = `${leftRatio * 100}%`;
-    frame.style.width = `${widthRatio * 100}%`;
+    const ratio = count <= 1 ? 1 : (state.imageIndex + 1) / count;
+    frame.style.left = "0%";
+    frame.style.width = `${Math.max(0.4, ratio * 100)}%`;
+    progress.dataset.label = `${state.imageIndex + 1} / ${count}`;
 }
 
 function handleProgressHover(event) {
@@ -990,6 +978,11 @@ function handleProgressHover(event) {
 
     const { ratio, x } = getProgressPointer(event);
     const index = getImageIndexByRatio(ratio);
+    if (index === state.progressPreviewIndex) {
+        return;
+    }
+
+    state.progressPreviewIndex = index;
     const image = state.grayImages[index];
     const preview = $("imageProgressPreview");
     $("imageProgressPreviewImg").src = image.fileUrl;
@@ -999,6 +992,7 @@ function handleProgressHover(event) {
 }
 
 function hideProgressPreview() {
+    state.progressPreviewIndex = -1;
     $("imageProgressPreview").classList.remove("show");
 }
 
@@ -1040,7 +1034,7 @@ function renderRingOverlay() {
 
     const rings = state.ringLocations
         .filter((ring) => ring.beginMileage !== null || ring.endMileage !== null)
-        .slice(0, 180);
+        .slice(0, RING_OVERLAY_LIMIT);
 
     if (rings.length === 0) {
         overlay.innerHTML = "";
@@ -1066,21 +1060,32 @@ function renderRingOverlay() {
 }
 
 function renderDiseaseRows() {
-    $("diseaseRows").innerHTML = state.diseases.length
-        ? state.diseases.map((disease) => `
+    const rows = state.diseases.slice(0, DISEASE_ROW_RENDER_LIMIT);
+    const truncated = state.diseases.length > rows.length;
+    $("diseaseRows").innerHTML = rows.length
+        ? rows.map((disease) => `
             <tr class="${disease.diseaseId === state.selectedDiseaseId ? "selected" : ""}" data-disease-id="${disease.diseaseId}">
                 <td>${escapeHtml(disease.diseaseType || "未分类")}</td>
                 <td>${formatNumber(disease.mileage, 3)}</td>
                 <td>${formatNumber(disease.beginMileage, 2)}-${formatNumber(disease.endMileage, 2)}</td>
                 <td>${escapeHtml(disease.imageName || "")}</td>
             </tr>
-        `).join("")
+        `).join("") + (truncated ? `<tr class="list-truncated"><td colspan="4">已显示前 ${rows.length} 条，请用类型或里程筛选缩小范围</td></tr>` : "")
         : `<tr><td colspan="4">暂无病害记录</td></tr>`;
+}
 
-    document.querySelectorAll("[data-disease-id]").forEach((row) => {
-        row.addEventListener("click", () => focusDiseaseOnImage(row.dataset.diseaseId));
-        row.addEventListener("dblclick", () => openDiseaseImage(row.dataset.diseaseId));
-    });
+function handleDiseaseRowClick(event) {
+    const row = event.target.closest("[data-disease-id]");
+    if (row) {
+        focusDiseaseOnImage(row.dataset.diseaseId);
+    }
+}
+
+function handleDiseaseRowDoubleClick(event) {
+    const row = event.target.closest("[data-disease-id]");
+    if (row) {
+        openDiseaseImage(row.dataset.diseaseId);
+    }
 }
 
 async function focusDiseaseOnImage(diseaseId) {
@@ -1149,10 +1154,23 @@ function renderDiseaseOverlay() {
     }
 
     const selected = state.diseases.find((item) => item.diseaseId === state.selectedDiseaseId);
-    const visibleDiseases = state.diseases
-        .map((disease) => ({ disease, position: getDiseasePositionOnImage(disease, image) }))
-        .filter((item) => item.position !== null && (item.position.inRange || item.disease.diseaseId === state.selectedDiseaseId))
-        .slice(0, 120);
+    const visibleDiseases = [];
+    for (const disease of state.diseases) {
+        const position = getDiseasePositionOnImage(disease, image);
+        if (position !== null && (position.inRange || disease.diseaseId === state.selectedDiseaseId)) {
+            visibleDiseases.push({ disease, position });
+            if (visibleDiseases.length >= DISEASE_OVERLAY_LIMIT) {
+                break;
+            }
+        }
+    }
+
+    if (selected && !visibleDiseases.some((item) => item.disease.diseaseId === selected.diseaseId)) {
+        const position = getDiseasePositionOnImage(selected, image);
+        if (position !== null) {
+            visibleDiseases.push({ disease: selected, position });
+        }
+    }
 
     overlay.innerHTML = visibleDiseases.map(({ disease, position }) => {
         const selectedClass = disease.diseaseId === state.selectedDiseaseId ? " selected" : "";

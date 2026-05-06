@@ -1,5 +1,23 @@
 <Solution>
-  <Project Path="TunnelPlatform.Api/TunnelPlatform.Api.csproj" />
-  <Project Path="TunnelPlatform.Shared/TunnelPlatform.Shared.csproj" />
-  <Project Path="TunnelPlatform.WinForms/TunnelPlatform.WinForms.csproj" />
+  <Configurations>
+    <BuildType Name="Debug" />
+    <BuildType Name="MinSizeRel" />
+    <BuildType Name="Release" />
+    <BuildType Name="RelWithDebInfo" />
+    <Platform Name="Any CPU" />
+    <Platform Name="x64" />
+  </Configurations>
+  <Project Path="TunnelPlatform.Api/TunnelPlatform.Api.csproj">
+    <BuildType Solution="MinSizeRel|*" Project="Release" />
+    <BuildType Solution="RelWithDebInfo|*" Project="Debug" />
+  </Project>
+  <Project Path="TunnelPlatform.QtClient/build/TunnelPlatformQtClient.vcxproj" Id="2195f7c6-97cf-3638-9095-3d8d23c10e52" />
+  <Project Path="TunnelPlatform.Shared/TunnelPlatform.Shared.csproj">
+    <BuildType Solution="MinSizeRel|*" Project="Release" />
+    <BuildType Solution="RelWithDebInfo|*" Project="Debug" />
+  </Project>
+  <Project Path="TunnelPlatform.WinForms/TunnelPlatform.WinForms.csproj">
+    <BuildType Solution="MinSizeRel|*" Project="Release" />
+    <BuildType Solution="RelWithDebInfo|*" Project="Debug" />
+  </Project>
 </Solution>

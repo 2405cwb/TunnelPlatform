@@ -1,0 +1,26 @@
+{
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "qt-6.8.3-msvc",
+      "displayName": "Qt 6.8.3 MSVC",
+      "description": "Use local Qt 6.8.3 MSVC kit.",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "CMAKE_PREFIX_PATH": "C:/Qt/Qt6.10/6.8.3/msvc2022_64"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "release",
+      "configurePreset": "qt-6.8.3-msvc",
+      "configuration": "Release"
+    },
+    {
+      "name": "debug",
+      "configurePreset": "qt-6.8.3-msvc",
+      "configuration": "Debug"
+    }
+  ]
+}
