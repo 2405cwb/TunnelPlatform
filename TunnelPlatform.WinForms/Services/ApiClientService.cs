@@ -133,10 +133,32 @@ public sealed class ApiClientService
         };
     }
 
-    private static async Task<T?> ReadResponseAsync<T>(HttpResponseMessage response, CancellationToken cancellationToken)
+    //private static async Task<T?> ReadResponseAsync<T>(HttpResponseMessage response, CancellationToken cancellationToken)
+    //{
+
+
+    //    await EnsureSuccessAsync(response, cancellationToken);
+    //    return await response.Content.ReadFromJsonAsync<T>(JsonOptions, cancellationToken);
+    //}
+
+    private static async Task<T?> ReadResponseAsync<T>(
+    HttpResponseMessage response,
+    CancellationToken cancellationToken)
     {
-        await EnsureSuccessAsync(response, cancellationToken);
-        return await response.Content.ReadFromJsonAsync<T>(JsonOptions, cancellationToken);
+        var text = await response.Content.ReadAsStringAsync(cancellationToken);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new HttpRequestException(
+                $"请求失败：{(int)response.StatusCode} {response.ReasonPhrase}\n{text}");
+        }
+
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return default;
+        }
+
+        return JsonSerializer.Deserialize<T>(text, JsonOptions);
     }
 
     private static async Task EnsureSuccessAsync(HttpResponseMessage response, CancellationToken cancellationToken)

@@ -160,7 +160,7 @@ public partial class Form1 : Form
                 .Select(entity =>
                 {
                     var folderPath = Path.Combine(txtDataFolder.Text.Trim(), entity.EntityCode);
-                    return new LocalEntityViewModel
+                     return new LocalEntityViewModel
                     {
                         EntityId = entity.EntityId,
                         EntityCode = entity.EntityCode,

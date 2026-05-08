@@ -209,14 +209,21 @@ public sealed class ImportService : IImportService
             if (extension == ".db")
             {
                 var tempDbPath = await SaveToTemporaryFileAsync(file, cancellationToken);
+                _logger.LogInformation("正在提取缩略图，数据库文件: {FilePath}", file);
                 try
                 {
                     var thumbnailBytes = await ExtractThumbnailAsync(tempDbPath, cancellationToken);
+
                     outputFileName = $"{Path.GetFileNameWithoutExtension(file.FileName)}.jpg";
                     destinationPath = Path.Combine(grayDirectory, outputFileName);
                     await File.WriteAllBytesAsync(destinationPath, thumbnailBytes, cancellationToken);
                     fileSize = thumbnailBytes.LongLength;
                     sourceKind = "db-thumbnail";
+                }
+                catch
+                {
+
+                    throw  ;
                 }
                 finally
                 {

@@ -38,6 +38,9 @@ public sealed class ImportsController : ControllerBase
     /// </remarks>
     [HttpPost("entity")]
     [DisableRequestSizeLimit]
+    [RequestFormLimits(
+    ValueCountLimit = 100000,
+    MultipartBodyLengthLimit = 20L * 1024 * 1024 * 1024)]
     public async Task<ActionResult<DatasetImportResultDto>> ImportEntity(CancellationToken cancellationToken)
     {
         var form = await Request.ReadFormAsync(cancellationToken);
