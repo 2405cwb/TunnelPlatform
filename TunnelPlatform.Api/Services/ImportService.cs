@@ -373,6 +373,11 @@ public sealed class ImportService : IImportService
         {
             foreach (var row in await ReadRowsAsync(connection, "BASIC_DISEASE", cancellationToken))
             {
+                if (IsDeletedDiseaseRow(row))
+                {
+                    continue;
+                }
+
                 dataset.Diseases.Add(CreateDiseaseFromTwoDimensional(row, "BASIC_DISEASE", dataset));
             }
         }
@@ -382,6 +387,11 @@ public sealed class ImportService : IImportService
             {
                 foreach (var row in await ReadRowsAsync(connection, mapping.Key, cancellationToken))
                 {
+                    if (IsDeletedDiseaseRow(row))
+                    {
+                        continue;
+                    }
+
                     dataset.Diseases.Add(CreateDiseaseFromTwoDimensional(row, mapping.Key, dataset, mapping.Value));
                 }
             }
@@ -627,6 +637,11 @@ public sealed class ImportService : IImportService
             SourceCategory = "2D",
             SourceTable = sourceTable,
         }, SerializeRow(row));
+    }
+
+    private static bool IsDeletedDiseaseRow(IReadOnlyDictionary<string, object?> row)
+    {
+        return GetInt(row, "DeleteIdentifier") == 1;
     }
 
     private static DiseaseChkData CreateDiseaseFromThreeDimensional(
