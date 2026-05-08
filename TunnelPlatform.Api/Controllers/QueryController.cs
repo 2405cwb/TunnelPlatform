@@ -298,7 +298,6 @@ public sealed class QueryController : ControllerBase
             return NotFound(new { message = "未找到指定病害记录。" });
         }
 
-        var diseaseMileage = disease.DiseaseMileage ?? disease.BegMileage ?? disease.EndMileage ?? 0d;
         var imageQuery = _dbContext.ImageData
             .AsNoTracking()
             .Include(x => x.Dataset)
@@ -307,20 +306,31 @@ public sealed class QueryController : ControllerBase
                 && x.Dataset.StationGuid == entityId
                 && x.ImageType == "disease-image");
 
-        var image = await imageQuery
-            .Where(x => disease.DiseaseName == null || x.DiseaseType == disease.DiseaseName)
-            .OrderBy(x => Math.Abs((x.CenterMileage ?? diseaseMileage) - diseaseMileage))
-            .Select(x => ToDiseaseImageDto(x, station, entityId))
-            .FirstOrDefaultAsync(cancellationToken);
+        var exactImageNames = new[] { disease.DiseaseImageName, disease.ImageName }
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => Path.GetFileName(x!.Trim()))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
 
-        image ??= await imageQuery
-            .OrderBy(x => Math.Abs((x.CenterMileage ?? diseaseMileage) - diseaseMileage))
-            .Select(x => ToDiseaseImageDto(x, station, entityId))
-            .FirstOrDefaultAsync(cancellationToken);
+        if (exactImageNames.Length == 0)
+        {
+            return NotFound(new { message = "当前病害记录没有明确的高清图文件名，无法精确定位病害高清图。" });
+        }
+
+        var images = await imageQuery.ToListAsync(cancellationToken);
+        var image = images
+            .Where(x => exactImageNames.Contains(NormalizeFileName(x.ImageName), StringComparer.OrdinalIgnoreCase))
+            .OrderBy(x => x.ImageName)
+            .FirstOrDefault();
 
         return image is null
-            ? NotFound(new { message = "当前病害未匹配到二维病害高清图。" })
-            : Ok(image);
+            ? NotFound(new { message = $"当前病害指定的高清图文件不存在：{string.Join("、", exactImageNames)}。" })
+            : Ok(ToDiseaseImageDto(image, station, entityId));
+    }
+
+    private static string NormalizeFileName(string? value)
+    {
+        return Path.GetFileName(value?.Trim() ?? string.Empty);
     }
 
     private static DiseaseImageFileDto ToDiseaseImageDto(ImageData image, Station station, Guid entityId)

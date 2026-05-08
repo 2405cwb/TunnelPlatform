@@ -2,6 +2,7 @@
 
 #include <QAbstractItemView>
 #include <QComboBox>
+#include <QDialog>
 #include <QFrame>
 #include <QGridLayout>
 #include <QGroupBox>
@@ -215,6 +216,7 @@ void MainWindow::buildUi()
     diseaseTable_->verticalHeader()->setVisible(false);
     diseaseTable_->setEditTriggers(QAbstractItemView::NoEditTriggers);
     diseaseTable_->setSelectionBehavior(QAbstractItemView::SelectRows);
+    diseaseTable_->setToolTip("双击病害行查看匹配的二维病害高清图");
     bottomLayout->addWidget(bottomTitle);
     bottomLayout->addWidget(diseaseTable_);
     bottomPanel->setMaximumHeight(240);
@@ -231,6 +233,7 @@ void MainWindow::buildUi()
     connect(entityList_, &QListWidget::currentItemChanged, this, &MainWindow::onEntityChanged);
     connect(prevImageButton_, &QPushButton::clicked, this, &MainWindow::showPreviousImageGroup);
     connect(nextImageButton_, &QPushButton::clicked, this, &MainWindow::showNextImageGroup);
+    connect(diseaseTable_, &QTableWidget::cellDoubleClicked, this, &MainWindow::onDiseaseTableDoubleClicked);
 }
 
 void MainWindow::applyTheme()
@@ -398,6 +401,11 @@ void MainWindow::showNextImageGroup()
     scrollToImage(qMin(grayImages_.size() - 1, currentImageIndex_ + 3));
 }
 
+void MainWindow::onDiseaseTableDoubleClicked(int row, int)
+{
+    openDiseaseImage(row);
+}
+
 void MainWindow::setBusy(bool busy)
 {
     refreshButton_->setEnabled(!busy);
@@ -485,6 +493,8 @@ void MainWindow::loadEntityDetails(const QString &projectId, const QString &enti
 {
     metaLabel_->setText("正在加载灰度图和病害记录...");
     grayImages_ = {};
+    diseases_ = {};
+    diseaseTable_->setRowCount(0);
     currentImageIndex_ = -1;
     updateImageControls();
 
@@ -636,6 +646,7 @@ void MainWindow::updateStats(const QJsonArray &stats)
 
 void MainWindow::updateDiseases(const QJsonArray &diseases)
 {
+    diseases_ = diseases;
     diseaseTable_->setRowCount(diseases.size());
     for (int row = 0; row < diseases.size(); ++row) {
         const auto object = diseases.at(row).toObject();
@@ -645,10 +656,102 @@ void MainWindow::updateDiseases(const QJsonArray &diseases)
             .arg(mileageText(object.value("beginMileage")))
             .arg(mileageText(object.value("endMileage")))));
         diseaseTable_->setItem(row, 3, new QTableWidgetItem(numberText(object, "severity")));
-        diseaseTable_->setItem(row, 4, new QTableWidgetItem(displayText(object, "imageName")));
+        auto *imageItem = new QTableWidgetItem(displayText(object, "imageName"));
+        imageItem->setToolTip("双击本行查看匹配的二维病害高清图");
+        diseaseTable_->setItem(row, 4, imageItem);
     }
 
     setStatus(QString("已加载 %1 条病害记录").arg(diseases.size()));
+}
+
+void MainWindow::openDiseaseImage(int row)
+{
+    if (row < 0 || row >= diseases_.size()) {
+        setStatus("未选中有效病害记录。");
+        return;
+    }
+
+    if (currentProjectId_.isEmpty() || currentEntityId_.isEmpty()) {
+        setStatus("请先选择工程和站点/区间。");
+        return;
+    }
+
+    const auto disease = diseases_.at(row).toObject();
+    const auto diseaseId = disease.value("diseaseId").toString();
+    if (diseaseId.isEmpty()) {
+        setStatus("当前病害记录缺少 diseaseId，无法匹配高清图。");
+        return;
+    }
+
+    setStatus("正在匹配病害高清图...");
+    apiClient_.getBestDiseaseImage(
+        currentProjectId_,
+        currentEntityId_,
+        diseaseId,
+        [this](const QJsonDocument &doc) {
+            const auto image = doc.object();
+            const auto fileUrl = image.value("fileUrl").toString();
+            if (fileUrl.isEmpty()) {
+                setStatus("高清图接口返回缺少 fileUrl。");
+                return;
+            }
+
+            setStatus("正在下载病害高清图：" + fileUrl);
+            apiClient_.getImageBytes(
+                fileUrl,
+                [this, image](const QByteArray &bytes) {
+                    showDiseaseImageDialog(image, bytes);
+                    setStatus("已打开病害高清图：" + displayText(image, "fileName"));
+                },
+                [this](const QString &message) {
+                    handleRequestError("高清图下载失败：" + message);
+                });
+        },
+        [this](const QString &message) {
+            handleRequestError("高清图匹配失败：" + message);
+        });
+}
+
+void MainWindow::showDiseaseImageDialog(const QJsonObject &image, const QByteArray &bytes)
+{
+    QPixmap pixmap;
+    if (!pixmap.loadFromData(bytes)) {
+        setStatus("高清图返回了数据，但 Qt 无法解码为图片。");
+        return;
+    }
+
+    auto *dialog = new QDialog(this);
+    dialog->setAttribute(Qt::WA_DeleteOnClose);
+    dialog->setWindowTitle("病害高清图 - " + displayText(image, "fileName"));
+    dialog->resize(1100, 780);
+
+    auto *layout = new QVBoxLayout(dialog);
+    layout->setContentsMargins(12, 12, 12, 12);
+    layout->setSpacing(10);
+
+    auto *meta = new QLabel(QString("%1  |  类型：%2  |  里程：%3  |  URL：%4")
+        .arg(displayText(image, "fileName"))
+        .arg(displayText(image, "diseaseType"))
+        .arg(mileageText(image.value("mileage")))
+        .arg(displayText(image, "fileUrl")));
+    meta->setWordWrap(true);
+    layout->addWidget(meta);
+
+    auto *scroll = new QScrollArea(dialog);
+    scroll->setWidgetResizable(false);
+
+    auto *imageLabel = new QLabel();
+    imageLabel->setAlignment(Qt::AlignCenter);
+    imageLabel->setPixmap(pixmap);
+    imageLabel->resize(pixmap.size());
+    scroll->setWidget(imageLabel);
+    layout->addWidget(scroll, 1);
+
+    auto *closeButton = new QPushButton("关闭");
+    connect(closeButton, &QPushButton::clicked, dialog, &QDialog::accept);
+    layout->addWidget(closeButton, 0, Qt::AlignRight);
+
+    dialog->show();
 }
 
 void MainWindow::updateImageControls()

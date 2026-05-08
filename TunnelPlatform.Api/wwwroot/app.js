@@ -28,6 +28,7 @@ const state = {
     imageWheelDelta: 0,
     imageWheelFrame: null,
     imageScrollTimer: null,
+    diseaseClickTimer: null,
     imageLoadId: 0,
     progressPreviewIndex: -1,
     projectLoadId: 0,
@@ -224,7 +225,7 @@ function bindEvents() {
     $("diseaseTypeFilter").addEventListener("change", loadDiseases);
     $("mileageStart").addEventListener("change", loadDiseases);
     $("mileageEnd").addEventListener("change", loadDiseases);
-    $("diseaseRows").addEventListener("click", handleDiseaseRowClick);
+   // $("diseaseRows").addEventListener("click", handleDiseaseRowClick);
     $("diseaseRows").addEventListener("dblclick", handleDiseaseRowDoubleClick);
     $("entityStatsButton").addEventListener("click", () => setStatsScope("entity"));
     $("projectStatsButton").addEventListener("click", () => setStatsScope("project"));
@@ -1068,7 +1069,11 @@ function renderDiseaseRows() {
                 <td>${escapeHtml(disease.diseaseType || "未分类")}</td>
                 <td>${formatNumber(disease.mileage, 3)}</td>
                 <td>${formatNumber(disease.beginMileage, 2)}-${formatNumber(disease.endMileage, 2)}</td>
-                <td>${escapeHtml(disease.imageName || "")}</td>
+                <td>
+                    <button class="disease-image-link" type="button" data-disease-action="open-image">
+                        ${escapeHtml(disease.imageName || "查看高清图")}
+                    </button>
+                </td>
             </tr>
         `).join("") + (truncated ? `<tr class="list-truncated"><td colspan="4">已显示前 ${rows.length} 条，请用类型或里程筛选缩小范围</td></tr>` : "")
         : `<tr><td colspan="4">暂无病害记录</td></tr>`;
@@ -1076,16 +1081,40 @@ function renderDiseaseRows() {
 
 function handleDiseaseRowClick(event) {
     const row = event.target.closest("[data-disease-id]");
-    if (row) {
-        focusDiseaseOnImage(row.dataset.diseaseId);
+    if (!row) {
+        return;
     }
+
+    if (event.target.closest("[data-disease-action='open-image']")) {
+        event.preventDefault();
+        window.clearTimeout(state.diseaseClickTimer);
+        state.diseaseClickTimer = null;
+        openDiseaseImage(row.dataset.diseaseId);
+        return;
+    }
+
+    if (event.detail > 1) {
+        return;
+    }
+
+    const diseaseId = row.dataset.diseaseId;
+    window.clearTimeout(state.diseaseClickTimer);
+    state.diseaseClickTimer = window.setTimeout(() => {
+        state.diseaseClickTimer = null;
+        focusDiseaseOnImage(diseaseId);
+    }, 420);
 }
 
 function handleDiseaseRowDoubleClick(event) {
     const row = event.target.closest("[data-disease-id]");
-    if (row) {
-        openDiseaseImage(row.dataset.diseaseId);
+    if (!row) {
+        return;
     }
+
+    event.preventDefault();
+    window.clearTimeout(state.diseaseClickTimer);
+    state.diseaseClickTimer = null;
+    openDiseaseImage(row.dataset.diseaseId);
 }
 
 async function focusDiseaseOnImage(diseaseId) {

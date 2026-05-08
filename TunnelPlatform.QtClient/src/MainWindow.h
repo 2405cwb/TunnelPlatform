@@ -32,6 +32,7 @@ private slots:
     void onEntityChanged(QListWidgetItem *current, QListWidgetItem *previous);
     void showPreviousImageGroup();
     void showNextImageGroup();
+    void onDiseaseTableDoubleClicked(int row, int column);
 
 private:
     void buildUi();
@@ -51,6 +52,8 @@ private:
     void updateOverview(const QJsonObject &overview);
     void updateStats(const QJsonArray &stats);
     void updateDiseases(const QJsonArray &diseases);
+    void openDiseaseImage(int row);
+    void showDiseaseImageDialog(const QJsonObject &image, const QByteArray &bytes);
     void updateImageControls();
 
     static QString displayText(const QJsonObject &object, const QString &key);
@@ -86,6 +89,7 @@ private:
     QJsonArray projects_;
     QJsonArray entities_;
     QJsonArray grayImages_;
+    QJsonArray diseases_;
     QString currentProjectId_;
     QString currentEntityId_;
     int currentImageIndex_ = -1;

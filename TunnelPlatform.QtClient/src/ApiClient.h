@@ -39,6 +39,14 @@ public:
     // GET /api/query/projects/{projectId}/entities/{entityId}/diseases
     void getEntityDiseases(const QString &projectId, const QString &entityId, JsonCallback onSuccess, ErrorCallback onError);
 
+    // GET /api/query/projects/{projectId}/entities/{entityId}/diseases/{diseaseId}/best-image
+    void getBestDiseaseImage(
+        const QString &projectId,
+        const QString &entityId,
+        const QString &diseaseId,
+        JsonCallback onSuccess,
+        ErrorCallback onError);
+
     // GET /api/query/projects/{projectId}/disease-statistics?entityId={entityId}
     void getDiseaseStatistics(const QString &projectId, const QString &entityId, JsonCallback onSuccess, ErrorCallback onError);
 

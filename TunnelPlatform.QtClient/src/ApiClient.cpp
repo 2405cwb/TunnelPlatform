@@ -54,6 +54,16 @@ void ApiClient::getEntityDiseases(const QString &projectId, const QString &entit
     getJson(QString("/api/query/projects/%1/entities/%2/diseases").arg(projectId, entityId), std::move(onSuccess), std::move(onError));
 }
 
+void ApiClient::getBestDiseaseImage(
+    const QString &projectId,
+    const QString &entityId,
+    const QString &diseaseId,
+    JsonCallback onSuccess,
+    ErrorCallback onError)
+{
+    getJson(QString("/api/query/projects/%1/entities/%2/diseases/%3/best-image").arg(projectId, entityId, diseaseId), std::move(onSuccess), std::move(onError));
+}
+
 void ApiClient::getDiseaseStatistics(const QString &projectId, const QString &entityId, JsonCallback onSuccess, ErrorCallback onError)
 {
     getJson(QString("/api/query/projects/%1/disease-statistics?entityId=%2").arg(projectId, entityId), std::move(onSuccess), std::move(onError));
