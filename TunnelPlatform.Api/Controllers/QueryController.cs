@@ -212,6 +212,8 @@ public sealed class QueryController : ControllerBase
                 FileUrl = StoragePathHelper.ToFileUrl(x.RelativePath ?? string.Empty),
                 BeginMileage = x.BegMileage,
                 EndMileage = x.EndMileage,
+                Width = x.Width,
+                Height = x.Height,
                 SourceKind = x.SourceKind ?? string.Empty,
                 FileSize = x.FileSize ?? 0,
             })
@@ -255,10 +257,88 @@ public sealed class QueryController : ControllerBase
                 EndMileage = x.EndMileage,
                 RingType = x.RingType,
                 ImageName = x.ImageName,
+                BeginLocationX = x.BeginLocationX,
+                EndLocationX = x.EndLoctionX,
                 SourceCategory = x.SourceCategory,
                 SourceTable = x.SourceTable,
             })
             .ToListAsync(cancellationToken));
+    }
+
+    [HttpGet("projects/{projectId:guid}/entities/{entityId:guid}/ring-fits")]
+    public async Task<ActionResult<List<RingFitDto>>> GetRingFits(Guid projectId, Guid entityId, CancellationToken cancellationToken)
+    {
+        var station = await GetStationAsync(projectId, entityId, cancellationToken);
+
+        return Ok(await _dbContext.RingFits
+            .AsNoTracking()
+            .Where(x => x.ProjectInstanceId == projectId && x.StationID == station.Id)
+            .OrderBy(x => x.RingID)
+            .ThenBy(x => x.Mileage)
+            .ThenBy(x => x.FitFrame)
+            .Select(x => new RingFitDto
+            {
+                RingFitId = x.RowGuid,
+                EntityId = entityId,
+                RingId = x.RingID,
+                Mileage = x.Mileage,
+                Laxis = x.Laxis,
+                Saxis = x.Saxis,
+                Vaxis = x.Vaxis,
+                PositiveX = x.PositiveX,
+                NegativeX = x.NegativeX,
+                PositiveY = x.PositiveY,
+                NegativeY = x.NegativeY,
+                Angle = x.Angle,
+                EllipsePosX = x.EllipsePosX,
+                EllipsePosY = x.EllipsePosY,
+                FitFrame = x.FitFrame,
+                PosInfo = x.PosInfo,
+                PosAngle = x.PosAngle,
+                Variance = x.Variance,
+                NegativeXCorrectVal = x.NegativeXCorrectVal,
+                PositiveXCorrectVal = x.PositiveXCorrectVal,
+                Coord3D = x.Coord3D,
+                SourceCategory = x.SourceCategory,
+                SourceTable = x.SourceTable,
+            })
+            .ToListAsync(cancellationToken));
+    }
+
+    [HttpGet("projects/{projectId:guid}/entities/{entityId:guid}/point-cloud-frames")]
+    public async Task<ActionResult<List<PointCloudFrameDto>>> GetPointCloudFrames(Guid projectId, Guid entityId, CancellationToken cancellationToken)
+    {
+        var station = await GetStationAsync(projectId, entityId, cancellationToken);
+
+        return Ok(await _dbContext.SecPtcloudData
+            .AsNoTracking()
+            .Where(x => x.ProjectInstanceId == projectId && x.StationID == station.Id)
+            .OrderBy(x => x.Frame == null ? 1 : 0)
+            .ThenBy(x => x.Frame)
+            .ThenBy(x => x.PointCloudFileName)
+            .Select(x => ToPointCloudFrameDto(x, entityId))
+            .ToListAsync(cancellationToken));
+    }
+
+    [HttpGet("projects/{projectId:guid}/entities/{entityId:guid}/point-cloud-frames/{frame:long}")]
+    public async Task<ActionResult<PointCloudFrameDto>> GetPointCloudFrameByFrame(
+        Guid projectId,
+        Guid entityId,
+        long frame,
+        CancellationToken cancellationToken)
+    {
+        var station = await GetStationAsync(projectId, entityId, cancellationToken);
+        var pointCloud = await _dbContext.SecPtcloudData
+            .AsNoTracking()
+            .Where(x => x.ProjectInstanceId == projectId
+                && x.StationID == station.Id
+                && x.Frame == frame)
+            .OrderBy(x => x.PointCloudFileName)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return pointCloud is null
+            ? NotFound(new { message = $"当前区间未找到帧号 {frame} 对应的点云文件。" })
+            : Ok(ToPointCloudFrameDto(pointCloud, entityId));
     }
 
     [HttpGet("projects/{projectId:guid}/entities/{entityId:guid}/disease-images")]
@@ -349,6 +429,23 @@ public sealed class QueryController : ControllerBase
             FileUrl = StoragePathHelper.ToFileUrl(image.RelativePath ?? string.Empty),
             Mileage = image.CenterMileage,
             FileSize = image.FileSize ?? 0,
+        };
+    }
+
+    private static PointCloudFrameDto ToPointCloudFrameDto(SecPtcloudData pointCloud, Guid entityId)
+    {
+        return new PointCloudFrameDto
+        {
+            PointCloudId = pointCloud.RowGuid,
+            EntityId = entityId,
+            Frame = pointCloud.Frame,
+            FileName = pointCloud.PointCloudFileName ?? string.Empty,
+            RelativePath = pointCloud.RelativePath ?? string.Empty,
+            FileUrl = StoragePathHelper.ToFileUrl(pointCloud.RelativePath ?? string.Empty),
+            FileType = pointCloud.FileType ?? string.Empty,
+            FileSize = pointCloud.FileSize ?? 0,
+            SourceCategory = pointCloud.SourceCategory,
+            SourceTable = pointCloud.SourceTable,
         };
     }
 

@@ -853,6 +853,10 @@ h2 {
     box-shadow: 0 0 10px rgba(255, 195, 91, 0.48);
 }
 
+.ring-mark-end {
+    opacity: 0.55;
+}
+
 .ring-label {
     position: absolute;
     top: 10px;

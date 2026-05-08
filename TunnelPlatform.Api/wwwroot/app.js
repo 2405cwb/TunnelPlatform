@@ -1028,16 +1028,37 @@ function renderRingOverlay() {
     notice.style.display = "none";
     notice.textContent = "";
 
-    if (!$("ringToggle").checked || !image || image.beginMileage === null || image.endMileage === null) {
+    if (!$("ringToggle").checked || !image) {
         overlay.innerHTML = "";
         return;
     }
 
-    const rings = state.ringLocations
-        .filter((ring) => ring.beginMileage !== null || ring.endMileage !== null)
+    const imageNameMatchedRings = state.ringLocations.filter((ring) => sameFileName(ring.imageName, image.fileName));
+    const rings = (imageNameMatchedRings.length > 0 ? imageNameMatchedRings : state.ringLocations)
         .slice(0, RING_OVERLAY_LIMIT);
 
     if (rings.length === 0) {
+        overlay.innerHTML = "";
+        return;
+    }
+
+    const imageMetrics = getCurrentImageMetrics(image);
+    const pixelRings = imageMetrics
+        ? rings.filter((ring) => ring.beginLocationX !== null || ring.endLocationX !== null)
+        : [];
+
+    if (pixelRings.length > 0) {
+        overlay.innerHTML = pixelRings.map((ring, index) => renderPixelRingMark(ring, imageMetrics, index)).join("");
+        return;
+    }
+
+    if (image.beginMileage === null || image.endMileage === null) {
+        overlay.innerHTML = "";
+        return;
+    }
+
+    const mileageRings = rings.filter((ring) => ring.beginMileage !== null || ring.endMileage !== null);
+    if (mileageRings.length === 0) {
         overlay.innerHTML = "";
         return;
     }
@@ -1048,16 +1069,77 @@ function renderRingOverlay() {
 
     if (state.ringPreviewMode === "sequence") {
         notice.style.display = "block";
-        notice.textContent = "样例图里程与环片里程未对齐，当前按环序均匀预览。正式数据会按真实里程叠加。";
+        notice.textContent = "当前灰度图缺少原图宽度或环片像素坐标，已退回里程/环序预览。重新导入带 info.width 的缩略图后会按像素精确叠加。";
     }
 
-    overlay.innerHTML = rings.map((ring, index) => {
+    overlay.innerHTML = mileageRings.map((ring, index) => {
         const left = state.ringPreviewMode === "sequence"
-            ? (rings.length === 1 ? 50 : index / (rings.length - 1) * 100)
+            ? (mileageRings.length === 1 ? 50 : index / (mileageRings.length - 1) * 100)
             : Math.min(100, Math.max(0, (((ring.beginMileage ?? ring.endMileage) - begin) / width) * 100));
         const label = ring.sourceRingId ?? index + 1;
         return `<div class="ring-mark" style="left:${left}%"></div><div class="ring-label" style="left:${left}%">${label}</div>`;
     }).join("");
+}
+
+function getCurrentImageMetrics(image) {
+    const imageElement = document.querySelector(`.strip-image[data-strip-index="${state.imageIndex}"]`);
+    const stage = $("imageStage");
+    const originalWidth = Number(image.width);
+    if (!imageElement || !stage || !Number.isFinite(originalWidth) || originalWidth <= 0) {
+        return null;
+    }
+
+    if (!imageElement.complete) {
+        imageElement.addEventListener("load", renderRingOverlay, { once: true });
+        return null;
+    }
+
+    const imageRect = imageElement.getBoundingClientRect();
+    const stageRect = stage.getBoundingClientRect();
+    if (imageRect.width <= 0 || stageRect.width <= 0) {
+        return null;
+    }
+
+    return {
+        originalWidth,
+        left: imageRect.left - stageRect.left,
+        width: imageRect.width,
+    };
+}
+
+function renderPixelRingMark(ring, metrics, index) {
+    const beginLeft = pixelXToStageLeft(ring.beginLocationX ?? ring.endLocationX, metrics);
+    const endLeft = pixelXToStageLeft(ring.endLocationX ?? ring.beginLocationX, metrics);
+    const label = ring.sourceRingId ?? index + 1;
+    const labelLeft = Number.isFinite(beginLeft) && Number.isFinite(endLeft)
+        ? (beginLeft + endLeft) / 2
+        : beginLeft;
+    const endMark = Number.isFinite(endLeft) && Math.abs(endLeft - beginLeft) > 1
+        ? `<div class="ring-mark ring-mark-end" style="left:${endLeft}px"></div>`
+        : "";
+
+    return `
+        <div class="ring-mark" style="left:${beginLeft}px"></div>
+        ${endMark}
+        <div class="ring-label" style="left:${labelLeft}px">${label}</div>
+    `;
+}
+
+function pixelXToStageLeft(value, metrics) {
+    const pixelX = Number(value);
+    if (!Number.isFinite(pixelX)) {
+        return 0;
+    }
+
+    const ratio = Math.min(1, Math.max(0, pixelX / metrics.originalWidth));
+    return metrics.left + ratio * metrics.width;
+}
+
+function sameFileName(left, right) {
+    const normalize = (value) => String(value || "").trim().split(/[\\/]/).pop().toLowerCase();
+    const leftName = normalize(left);
+    const rightName = normalize(right);
+    return leftName.length > 0 && rightName.length > 0 && leftName === rightName;
 }
 
 function renderDiseaseRows() {

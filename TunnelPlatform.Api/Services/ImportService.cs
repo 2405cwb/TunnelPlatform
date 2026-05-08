@@ -205,6 +205,8 @@ public sealed class ImportService : IImportService
             string destinationPath;
             long fileSize;
             string sourceKind;
+            int? originalWidth = null;
+            int? originalHeight = null;
 
             if (extension == ".db")
             {
@@ -212,13 +214,15 @@ public sealed class ImportService : IImportService
                 _logger.LogInformation("正在提取缩略图，数据库文件: {FilePath}", file);
                 try
                 {
-                    var thumbnailBytes = await ExtractThumbnailAsync(tempDbPath, cancellationToken);
+                    var thumbnailInfo = await ExtractThumbnailInfoAsync(tempDbPath, cancellationToken);
 
                     outputFileName = $"{Path.GetFileNameWithoutExtension(file.FileName)}.jpg";
                     destinationPath = Path.Combine(grayDirectory, outputFileName);
-                    await File.WriteAllBytesAsync(destinationPath, thumbnailBytes, cancellationToken);
-                    fileSize = thumbnailBytes.LongLength;
+                    await File.WriteAllBytesAsync(destinationPath, thumbnailInfo.ThumbnailBytes, cancellationToken);
+                    fileSize = thumbnailInfo.ThumbnailBytes.LongLength;
                     sourceKind = "db-thumbnail";
+                    originalWidth = thumbnailInfo.OriginalWidth;
+                    originalHeight = thumbnailInfo.OriginalHeight;
                 }
                 catch
                 {
@@ -256,6 +260,8 @@ public sealed class ImportService : IImportService
                 RelativePath = CombineRelative(storageRelativePath, "03灰度图", outputFileName),
                 SourceKind = sourceKind,
                 FileSize = fileSize,
+                Width = originalWidth,
+                Height = originalHeight,
                 SourceCategory = "gray",
                 SourceTable = sourceKind,
             }, "{}"));
@@ -283,6 +289,7 @@ public sealed class ImportService : IImportService
                 PointCloudFileName = Path.GetFileName(targetPath),
                 RelativePath = CombineRelative(storageRelativePath, "04点云", relativePath),
                 FileType = Path.GetExtension(targetPath).TrimStart('.').ToLowerInvariant(),
+                Frame = ParsePointCloudFrame(Path.GetFileName(targetPath)),
                 FileSize = new FileInfo(targetPath).Length,
                 SourceCategory = "point-cloud",
                 SourceTable = "04点云",
@@ -966,15 +973,30 @@ public sealed class ImportService : IImportService
         await file.CopyToAsync(fileStream, cancellationToken);
     }
 
-    private static async Task<byte[]> ExtractThumbnailAsync(string sqlitePath, CancellationToken cancellationToken)
+    private static async Task<ThumbnailInfo> ExtractThumbnailInfoAsync(string sqlitePath, CancellationToken cancellationToken)
     {
         await using var connection = await OpenSqliteAsync(sqlitePath, cancellationToken);
+        var tableNames = await GetTableNamesAsync(connection, cancellationToken);
+
         await using var command = connection.CreateCommand();
         command.CommandText = "SELECT data FROM thumbnail LIMIT 1;";
         var result = await command.ExecuteScalarAsync(cancellationToken);
-
-        return result as byte[]
+        var thumbnailBytes = result as byte[]
             ?? throw new InvalidOperationException($"灰度图数据库 {Path.GetFileName(sqlitePath)} 中未找到 thumbnail 数据。");
+
+        var originalWidth = default(int?);
+        var originalHeight = default(int?);
+        if (tableNames.Contains("info"))
+        {
+            var info = (await ReadRowsAsync(connection, "info", cancellationToken)).FirstOrDefault();
+            if (info is not null)
+            {
+                originalWidth = GetInt(info, "width") ?? GetInt(info, "ImageWidth");
+                originalHeight = GetInt(info, "height") ?? GetInt(info, "ImageHeight");
+            }
+        }
+
+        return new ThumbnailInfo(thumbnailBytes, originalWidth, originalHeight);
     }
 
     private static (double? BeginMileage, double? EndMileage) ParseMileageRange(string? fileName)
@@ -1018,6 +1040,25 @@ public sealed class ImportService : IImportService
         return int.TryParse(match.Groups["km"].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var kilometer)
             && double.TryParse(match.Groups["m"].Value, NumberStyles.Any, CultureInfo.InvariantCulture, out var meter)
             ? kilometer * 1000d + meter
+            : null;
+    }
+
+    private static long? ParsePointCloudFrame(string? fileName)
+    {
+        if (string.IsNullOrWhiteSpace(fileName))
+        {
+            return null;
+        }
+
+        var name = Path.GetFileNameWithoutExtension(fileName.Trim());
+        if (long.TryParse(name, NumberStyles.Integer, CultureInfo.InvariantCulture, out var frame))
+        {
+            return frame;
+        }
+
+        var match = Regex.Match(name, @"\d+");
+        return match.Success && long.TryParse(match.Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out frame)
+            ? frame
             : null;
     }
 
@@ -1165,4 +1206,6 @@ public sealed class ImportService : IImportService
 
         public string Type { get; init; } = string.Empty;
     }
+
+    private sealed record ThumbnailInfo(byte[] ThumbnailBytes, int? OriginalWidth, int? OriginalHeight);
 }

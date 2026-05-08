@@ -5,10 +5,10 @@
 ## 项目结构
 
 - `TunnelPlatform.Api`
-  - `.NET 10 WebAPI`
+  - `.NET 8 WebAPI`
   - 负责台账同步、单实体导入、SQLite 解析、PostgreSQL 写入、文件保存、Swagger、前端页面托管
 - `TunnelPlatform.WinForms`
-  - `.NET 10 WinForms`
+  - `.NET 8 WinForms`
   - 负责选择 API、台账、上传目录、站点/区间，执行上传和删除
 - `TunnelPlatform.Shared`
   - 共享 DTO、请求模型、命名和台账解析辅助逻辑
@@ -175,7 +175,7 @@ dotnet build .\TunnelPlatform.slnx
 
 ## 当前注意事项
 
-- 项目使用 `.NET 10 preview SDK`。
+- 项目使用 `.NET 8 SDK / ASP.NET Core 8 Runtime`。
 - Swagger 示例 GUID 不是实际工程实例 ID，前端或 C 端应先调用 `GET /api/query/project-instances`。
 - 当前样例数据的灰度图里程与环片里程不完全一致，正式数据对齐后前端会按真实里程叠加环片。
 - 当前样例 `04点云` 为空，前端已预留按帧号浏览入口。

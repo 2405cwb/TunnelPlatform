@@ -1,6 +1,6 @@
 # AGENTS.md - 隧道平台数据上传工具
 
-.NET 10 Preview 解决方案，包含 WebAPI + WinForms 客户端 + 共享类库。
+.NET 8 解决方案，包含 WebAPI + WinForms 客户端 + 共享类库。
 
 ## 构建与运行
 
@@ -19,9 +19,9 @@ dotnet run --project .\TunnelPlatform.WinForms\TunnelPlatform.WinForms.csproj
 
 | 项目 | 框架 | 作用 |
 |------|------|------|
-| `TunnelPlatform.Api` | net10.0, ASP.NET | WebAPI：台账同步、单实体导入、病害查询、文件树 |
-| `TunnelPlatform.WinForms` | net10.0-windows, WinForms | 桌面端：本地台账解析、实体选择、进度显示、上传执行 |
-| `TunnelPlatform.Shared` | net10.0, 类库 | 共享 DTO、命名辅助方法（`LedgerNamingHelper`） |
+| `TunnelPlatform.Api` | net8.0, ASP.NET | WebAPI：台账同步、单实体导入、病害查询、文件树 |
+| `TunnelPlatform.WinForms` | net8.0-windows, WinForms | 桌面端：本地台账解析、实体选择、进度显示、上传执行 |
+| `TunnelPlatform.Shared` | net8.0, 类库 | 共享 DTO、命名辅助方法（`LedgerNamingHelper`） |
 
 - 解决方案文件为 `.slnx` 格式
 - 依赖 PostgreSQL（localhost:5432，库名 `tunnel_platform`，账密见 `appsettings.json`）
@@ -57,7 +57,7 @@ WinForms 通过 `POST /api/imports/entity`（multipart/form-data）上传，字�
 ## 需要留意的坑
 
 - 二维 SQLite 中可能存在 **GBK/GB18030** 编码文本，`ImportService.cs` 已使用 `Encoding.GetEncoding("GB18030")` 兼容读取
-- 项目使用 **.NET 10 Preview SDK**，正式部署前需评估版本稳定性
+- 项目使用 **.NET 8 SDK / ASP.NET Core 8 Runtime**，部署服务器需安装对应运行时
 - PostgreSQL 必须先启动，API 启动时会建库建表（无需手动 migration）
 - `appsettings.json` 中包含明文数据库密码，**不要提交到公开仓库**
 - Windows PowerShell 控制台直接输出中文 JSON 可能显示乱码（不影响数据库和接口实际数据）

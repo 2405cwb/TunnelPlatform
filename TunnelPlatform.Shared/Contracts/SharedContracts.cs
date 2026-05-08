@@ -527,10 +527,127 @@ public sealed record RingLocationDto
     /// <summary>图像名称。</summary>
     public string? ImageName { get; init; }
 
+    /// <summary>起始环片在原始图像中的 X 像素坐标。</summary>
+    public int? BeginLocationX { get; init; }
+
+    /// <summary>终止环片在原始图像中的 X 像素坐标。</summary>
+    public int? EndLocationX { get; init; }
+
     /// <summary>来源层。</summary>
     public string SourceCategory { get; init; } = string.Empty;
 
     /// <summary>来源 SQLite 表名。</summary>
+    public string SourceTable { get; init; } = string.Empty;
+}
+
+/// <summary>
+/// 环片收敛拟合记录。
+/// </summary>
+public sealed record RingFitDto
+{
+    /// <summary>环片收敛记录 ID。</summary>
+    public Guid RingFitId { get; init; }
+
+    /// <summary>站点/区间 ID。</summary>
+    public Guid EntityId { get; init; }
+
+    /// <summary>来源表里的环号。</summary>
+    public int? RingId { get; init; }
+
+    /// <summary>里程。</summary>
+    public double? Mileage { get; init; }
+
+    /// <summary>长轴。</summary>
+    public double? Laxis { get; init; }
+
+    /// <summary>短轴。</summary>
+    public double? Saxis { get; init; }
+
+    /// <summary>竖轴。</summary>
+    public double? Vaxis { get; init; }
+
+    /// <summary>X 正向收敛。</summary>
+    public double? PositiveX { get; init; }
+
+    /// <summary>X 负向收敛。</summary>
+    public double? NegativeX { get; init; }
+
+    /// <summary>Y 正向收敛。</summary>
+    public double? PositiveY { get; init; }
+
+    /// <summary>Y 负向收敛。</summary>
+    public double? NegativeY { get; init; }
+
+    /// <summary>角度。</summary>
+    public double? Angle { get; init; }
+
+    /// <summary>椭圆中心 X。</summary>
+    public double? EllipsePosX { get; init; }
+
+    /// <summary>椭圆中心 Y。</summary>
+    public double? EllipsePosY { get; init; }
+
+    /// <summary>拟合帧号。</summary>
+    public int? FitFrame { get; init; }
+
+    /// <summary>位置信息。</summary>
+    public int? PosInfo { get; init; }
+
+    /// <summary>位置角。</summary>
+    public double? PosAngle { get; init; }
+
+    /// <summary>方差。</summary>
+    public double? Variance { get; init; }
+
+    /// <summary>X 负向修正值。</summary>
+    public double? NegativeXCorrectVal { get; init; }
+
+    /// <summary>X 正向修正值。</summary>
+    public double? PositiveXCorrectVal { get; init; }
+
+    /// <summary>三维坐标。</summary>
+    public string? Coord3D { get; init; }
+
+    /// <summary>来源层。</summary>
+    public string SourceCategory { get; init; } = string.Empty;
+
+    /// <summary>来源 SQLite 表名。</summary>
+    public string SourceTable { get; init; } = string.Empty;
+}
+
+/// <summary>
+/// 点云帧文件记录。
+/// </summary>
+public sealed record PointCloudFrameDto
+{
+    /// <summary>点云记录 ID。</summary>
+    public Guid PointCloudId { get; init; }
+
+    /// <summary>站点/区间 ID。</summary>
+    public Guid EntityId { get; init; }
+
+    /// <summary>帧号。</summary>
+    public long? Frame { get; init; }
+
+    /// <summary>点云文件名。</summary>
+    public string FileName { get; init; } = string.Empty;
+
+    /// <summary>服务器端相对路径。</summary>
+    public string RelativePath { get; init; } = string.Empty;
+
+    /// <summary>可直接访问的点云文件 URL。</summary>
+    public string FileUrl { get; init; } = string.Empty;
+
+    /// <summary>文件类型，例如 pt。</summary>
+    public string FileType { get; init; } = string.Empty;
+
+    /// <summary>文件大小。</summary>
+    public long FileSize { get; init; }
+
+    /// <summary>来源层。</summary>
+    public string SourceCategory { get; init; } = string.Empty;
+
+    /// <summary>来源目录或表名。</summary>
     public string SourceTable { get; init; } = string.Empty;
 }
 
@@ -568,6 +685,12 @@ public sealed record GrayImageFileDto
 
     /// <summary>终止里程。</summary>
     public double? EndMileage { get; init; }
+
+    /// <summary>灰度图原始宽度。db-thumbnail 来源时来自原始成果库 info.width。</summary>
+    public int? Width { get; init; }
+
+    /// <summary>灰度图原始高度。db-thumbnail 来源时来自原始成果库 info.height。</summary>
+    public int? Height { get; init; }
 
     /// <summary>来源类型，raw-image 或 db-thumbnail。</summary>
     public string SourceKind { get; init; } = string.Empty;
