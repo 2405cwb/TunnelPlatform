@@ -222,6 +222,16 @@ public sealed class QueryController : ControllerBase
         return Ok(result);
     }
 
+    /// <summary>
+    /// 获取环片位置
+    /// </summary>
+    /// <param name="projectId"></param>
+    /// <param name="entityId"></param>
+    /// <param name="mileageStart"></param>
+    /// <param name="mileageEnd"></param>
+    /// <param name="cancellationToken"></param>
+    /// <returns></returns>
+
     [HttpGet("projects/{projectId:guid}/entities/{entityId:guid}/ring-locations")]
     public async Task<ActionResult<List<RingLocationDto>>> GetRingLocations(
         Guid projectId,
@@ -305,6 +315,13 @@ public sealed class QueryController : ControllerBase
             .ToListAsync(cancellationToken));
     }
 
+    /// <summary>
+    /// 获取点云帧列表。注意：同一站点或区间内可能存在多个相同帧号的点云文件，实际使用时请结合返回的文件名等信息进行综合判断。
+    /// </summary>
+    /// <param name="projectId"></param>
+    /// <param name="entityId"></param>
+    /// <param name="cancellationToken"></param>
+    /// <returns></returns>
     [HttpGet("projects/{projectId:guid}/entities/{entityId:guid}/point-cloud-frames")]
     public async Task<ActionResult<List<PointCloudFrameDto>>> GetPointCloudFrames(Guid projectId, Guid entityId, CancellationToken cancellationToken)
     {
@@ -320,6 +337,14 @@ public sealed class QueryController : ControllerBase
             .ToListAsync(cancellationToken));
     }
 
+    /// <summary>
+    /// 根据帧号获取点云文件信息。注意：同一站点或区间内可能存在多个相同帧号的点云文件，实际使用时请结合返回的文件名等信息进行综合判断。
+    /// </summary>
+    /// <param name="projectId"></param>
+    /// <param name="entityId"></param>
+    /// <param name="frame"></param>
+    /// <param name="cancellationToken"></param>
+    /// <returns></returns>
     [HttpGet("projects/{projectId:guid}/entities/{entityId:guid}/point-cloud-frames/{frame:long}")]
     public async Task<ActionResult<PointCloudFrameDto>> GetPointCloudFrameByFrame(
         Guid projectId,

@@ -1,15 +1,15 @@
-using System.Reflection;
-using System.Text;
 using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Options;
 using Serilog;
+using System.Reflection;
+using System.Text;
 using TunnelPlatform.Api.Data;
 using TunnelPlatform.Api.Middleware;
 using TunnelPlatform.Api.Options;
-using TunnelPlatform.Api.Services;
-
+using TunnelPlatform.Api.Services; 
 Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
 var builder = WebApplication.CreateBuilder(args);
@@ -106,10 +106,14 @@ app.UseStaticFiles();
 app.UseSwagger();
 app.UseSwaggerUI();
 
+var provider = new FileExtensionContentTypeProvider();
+provider.Mappings[".pt"] = "application/octet-stream";
+
 app.UseStaticFiles(new StaticFileOptions
 {
     FileProvider = new PhysicalFileProvider(storageRoot),
     RequestPath = "/storage",
+    ContentTypeProvider = provider
 });
 
 app.MapControllers();
